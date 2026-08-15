@@ -14,6 +14,11 @@ All notable changes to termpeek are recorded here. Format follows
   X API v2 via `xint`, and cookie auth for posts the others cannot reach. Pin
   one with `TERMPEEK_X_BACKEND`; all three normalize to a single record shape so
   the renderer only knows one schema.
+- An MCP server (`scripts/termpeek-mcp`) exposing `preview`, `preview_many`,
+  `preview_diff` and `probe`. One adapter covers every MCP-speaking agent
+  instead of a bespoke integration each. Unlike image-oriented MCP servers it
+  returns text to the model and renders to the user's terminal — the model
+  already has a way to read an image; it has no way to show you one.
 - A Linux window transport. Previously `tp_detect_transport` returned `window`
   only on macOS, so a Linux user without tmux got `none` and termpeek could not
   work at all — while the README claimed Linux support. It now spawns

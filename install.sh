@@ -15,8 +15,8 @@ grn()  { printf '\033[32m%s\033[0m\n' "$1"; }
 dim()  { printf '\033[2m%s\033[0m\n' "$1"; }
 
 if [[ "${1:-}" == "--uninstall" ]]; then
-  rm -f "$BIN_DIR/termpeek" "$BIN_DIR/tp-session"
-  grn "removed termpeek and tp-session from $BIN_DIR"
+  rm -f "$BIN_DIR/termpeek" "$BIN_DIR/tp-session" "$BIN_DIR/termpeek-mcp"
+  grn "removed termpeek, tp-session and termpeek-mcp from $BIN_DIR"
   exit 0
 fi
 
@@ -25,7 +25,7 @@ mkdir -p "$BIN_DIR" || { red "cannot create $BIN_DIR"; exit 1; }
 # Check the link actually landed. Reporting success after a failed ln sends
 # people off to run a command that is not there.
 failed=0
-for cmd in termpeek tp-session; do
+for cmd in termpeek tp-session termpeek-mcp; do
   chmod +x "$ROOT/scripts/$cmd" 2>/dev/null
   if ! ln -sf "$ROOT/scripts/$cmd" "$BIN_DIR/$cmd" 2>/dev/null || [[ ! -x "$BIN_DIR/$cmd" ]]; then
     red "could not link $cmd into $BIN_DIR"
@@ -40,7 +40,7 @@ if (( failed )); then
   dim "You can also run it in place: $ROOT/scripts/termpeek"
   exit 1
 fi
-grn "linked termpeek and tp-session into $BIN_DIR"
+grn "linked termpeek, tp-session and termpeek-mcp into $BIN_DIR"
 
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
@@ -65,6 +65,7 @@ check bat      "code files"
 check delta    "diffs"
 check ffmpeg   "PDF page framing"
 check tmux     "sidebar transport (optional)"
+check jq       "X posts and the MCP server"
 
 if (( missing )); then
   echo

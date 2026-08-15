@@ -1,0 +1,211 @@
+#!/usr/bin/env bash
+# termpeek-mcp — an MCP server, so any MCP-speaking agent can show you media.
+#
+# Codex, Gemini CLI and others have no plugin surface worth targeting one at a
+# time, but they all speak MCP. This is the one adapter that covers them.
+#
+# The important design point, and the difference from every other image-related
+# MCP server: those return base64 so the MODEL can see a picture. This one
+# renders to YOUR terminal and returns a short text confirmation to the model.
+# The model already has a Read tool for looking at images; what it cannot do is
+# put one in front of you.
+#
+# Speaks JSON-RPC 2.0 over stdio, newline-delimited. Written in bash with jq
+# because jq is already a dependency and this keeps the project free of a
+# language runtime.
+
+set -uo pipefail
+
+tp__self="${BASH_SOURCE[0]}"
+while [ -L "$tp__self" ]; do
+  tp__dir="$(cd -P "$(dirname "$tp__self")" && pwd)"
+  tp__self="$(readlink "$tp__self")"
+  case "$tp__self" in /*) ;; *) tp__self="$tp__dir/$tp__self" ;; esac
+done
+ROOT="$(cd -P "$(dirname "$tp__self")/.." && pwd)"
+TERMPEEK="${TERMPEEK_BIN:-$ROOT/scripts/termpeek}"
+
+PROTOCOL_DEFAULT="2024-11-05"
+SERVER_VERSION="0.1.0"
+
+command -v jq >/dev/null 2>&1 || {
+  echo "termpeek-mcp: jq is required" >&2
+  exit 127
+}
+
+# --- wire helpers -----------------------------------------------------------
+# Responses go to stdout, one JSON object per line. Anything diagnostic must go
+# to stderr: a stray byte on stdout corrupts the protocol stream.
+emit() { printf '%s\n' "$1"; }
+
+reply() {
+  local id="$1" result="$2"
+  emit "$(jq -cn --argjson id "$id" --argjson result "$result" \
+    '{jsonrpc:"2.0", id:$id, result:$result}')"
+}
+
+reply_error() {
+  local id="$1" code="$2" message="$3"
+  emit "$(jq -cn --argjson id "$id" --argjson code "$code" --arg message "$message" \
+    '{jsonrpc:"2.0", id:$id, error:{code:$code, message:$message}}')"
+}
+
+# Tool results are content arrays. isError lets the model see a failure as a
+# failure rather than as prose it has to interpret.
+tool_result() {
+  local text="$1" is_error="${2:-false}"
+  jq -cn --arg text "$text" --argjson err "$is_error" \
+    '{content:[{type:"text", text:$text}], isError:$err}'
+}
+
+# --- tools ------------------------------------------------------------------
+TOOLS_JSON='[
+  {
+    "name": "preview",
+    "description": "Show a file to the USER in their terminal: image, video, PDF, code, diff, or an X/Twitter post URL. Renders outside the agent TUI, in a tmux pane or separate window. Use after creating or downloading something the user should look at, or when they ask to see it. This does NOT return the image to you — use your own file-reading tool if you need to inspect the contents.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {"type": "string", "description": "File path, or an https://x.com/<user>/status/<id> URL"},
+        "geometry": {"type": "string", "description": "Size in character cells, e.g. 100x50"},
+        "page": {"type": "integer", "description": "PDF page number"}
+      },
+      "required": ["path"]
+    }
+  },
+  {
+    "name": "preview_many",
+    "description": "Show several items to the USER at once. Types can be mixed: images, PDFs, videos and X posts. Use layout=gallery to tile them side by side, or layout=carousel to cycle through them one at a time.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "paths": {"type": "array", "items": {"type": "string"}, "description": "File paths and/or post URLs"},
+        "layout": {"type": "string", "enum": ["gallery", "carousel"], "description": "Default gallery"},
+        "geometry": {"type": "string"}
+      },
+      "required": ["paths"]
+    }
+  },
+  {
+    "name": "preview_diff",
+    "description": "Show the USER a git diff rendered side by side with syntax highlighting. Accepts the same arguments as git diff.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "args": {"type": "array", "items": {"type": "string"}, "description": "git diff arguments, e.g. [\"HEAD~1\"]"}
+      }
+    }
+  },
+  {
+    "name": "probe",
+    "description": "Report what the user terminal can display: graphics protocol and transport. Useful when a preview did not appear.",
+    "inputSchema": {"type": "object", "properties": {}}
+  }
+]'
+
+call_tool() {
+  local name="$1" args="$2"
+  local geometry page layout out rc
+
+  geometry="$(printf '%s' "$args" | jq -r '.geometry // empty')"
+  page="$(printf '%s' "$args" | jq -r '.page // empty')"
+  [[ -n "$geometry" ]] && export TERMPEEK_GEOMETRY="$geometry"
+  [[ -n "$page" ]] && export TERMPEEK_PDF_PAGE="$page"
+
+  case "$name" in
+    probe)
+      out="$("$TERMPEEK" --probe 2>&1)"
+      tool_result "$out"
+      ;;
+
+    preview)
+      local path; path="$(printf '%s' "$args" | jq -r '.path // empty')"
+      if [[ -z "$path" ]]; then
+        tool_result "preview needs a path" true; return
+      fi
+      out="$("$TERMPEEK" "$path" 2>&1)"; rc=$?
+      if (( rc == 0 )); then
+        tool_result "Shown to the user: $path"
+      else
+        tool_result "Could not show $path: ${out:-exit $rc}" true
+      fi
+      ;;
+
+    preview_many)
+      local -a paths=()
+      while IFS= read -r line; do [[ -n "$line" ]] && paths+=("$line"); done \
+        < <(printf '%s' "$args" | jq -r '.paths[]? // empty')
+      if (( ${#paths[@]} == 0 )); then
+        tool_result "preview_many needs at least one path" true; return
+      fi
+      layout="$(printf '%s' "$args" | jq -r '.layout // "gallery"')"
+      local flag="--gallery"; [[ "$layout" == "carousel" ]] && flag="--carousel"
+      out="$("$TERMPEEK" "$flag" "${paths[@]}" 2>&1)"; rc=$?
+      if (( rc == 0 )); then
+        tool_result "Shown to the user: ${#paths[@]} item(s) as a $layout"
+      else
+        tool_result "Could not show items: ${out:-exit $rc}" true
+      fi
+      ;;
+
+    preview_diff)
+      local -a dargs=()
+      while IFS= read -r line; do [[ -n "$line" ]] && dargs+=("$line"); done \
+        < <(printf '%s' "$args" | jq -r '.args[]? // empty')
+      out="$("$TERMPEEK" --diff ${dargs[@]+"${dargs[@]}"} 2>&1)"; rc=$?
+      if (( rc == 0 )); then
+        tool_result "${out:-Diff shown to the user}"
+      else
+        tool_result "Could not show the diff: ${out:-exit $rc}" true
+      fi
+      ;;
+
+    *)
+      tool_result "unknown tool: $name" true
+      ;;
+  esac
+}
+
+# --- dispatch ---------------------------------------------------------------
+while IFS= read -r line; do
+  [[ -z "$line" ]] && continue
+
+  method="$(printf '%s' "$line" | jq -r '.method // empty' 2>/dev/null)" || continue
+  [[ -z "$method" ]] && continue
+  # Notifications carry no id and must never be answered.
+  id="$(printf '%s' "$line" | jq -c '.id // null' 2>/dev/null)"
+
+  case "$method" in
+    initialize)
+      client_proto="$(printf '%s' "$line" | jq -r '.params.protocolVersion // empty')"
+      reply "$id" "$(jq -cn \
+        --arg proto "${client_proto:-$PROTOCOL_DEFAULT}" \
+        --arg version "$SERVER_VERSION" \
+        '{protocolVersion:$proto,
+          capabilities:{tools:{}},
+          serverInfo:{name:"termpeek", version:$version}}')"
+      ;;
+
+    notifications/initialized|notifications/cancelled)
+      ;;
+
+    tools/list)
+      reply "$id" "$(jq -cn --argjson tools "$TOOLS_JSON" '{tools:$tools}')"
+      ;;
+
+    tools/call)
+      tname="$(printf '%s' "$line" | jq -r '.params.name // empty')"
+      targs="$(printf '%s' "$line" | jq -c '.params.arguments // {}')"
+      reply "$id" "$(call_tool "$tname" "$targs")"
+      ;;
+
+    ping)
+      reply "$id" '{}'
+      ;;
+
+    *)
+      # Only answer requests. A notification we do not handle is simply ignored.
+      [[ "$id" != "null" ]] && reply_error "$id" -32601 "method not found: $method"
+      ;;
+  esac
+done

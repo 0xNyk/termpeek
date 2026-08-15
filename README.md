@@ -236,6 +236,27 @@ the same file are suppressed for 20 seconds, so a render loop opens one preview
 rather than forty. Set `TERMPEEK_AUTO_PREVIEW=0` to turn it off without editing
 settings. Full notes in [hooks/claude-code/README.md](hooks/claude-code/README.md).
 
+## Any agent that speaks MCP
+
+Codex, Gemini CLI and the rest have no plugin surface worth targeting one at a
+time, but they all speak MCP.
+
+```bash
+claude mcp add termpeek -- /path/to/termpeek/scripts/termpeek-mcp
+```
+
+```json
+{ "mcpServers": { "termpeek": { "command": "/path/to/termpeek/scripts/termpeek-mcp" } } }
+```
+
+Four tools: `preview`, `preview_many`, `preview_diff`, `probe`.
+
+Worth being clear about how this differs from other image-related MCP servers:
+they return base64 so the **model** can see a picture. This renders to **your
+terminal** and returns text to the model. The model already has a tool for
+reading an image; what it cannot do is put one in front of you. Details in
+[hooks/mcp/README.md](hooks/mcp/README.md).
+
 ## Two traps worth knowing
 
 Both cost real debugging time. They're encoded in the code; don't undo them.
@@ -256,16 +277,17 @@ beats sharp and stuck.
 
 | CLI | How | Status |
 |---|---|---|
-| Claude Code | skill (`SKILL.md`) | verified end to end |
-| Codex | shell + a note in `AGENTS.md` | expected to work, untested |
-| Hermes Agent | shell hook or Python plugin | expected to work, untested |
-| Gemini CLI | shell | expected to work, untested |
-| Grok Build | renders images natively; termpeek adds PDFs and diffs | untested |
+| Claude Code | skill, auto-preview hook, or MCP | verified end to end |
+| Codex | MCP | protocol verified, not tried in the client |
+| Gemini CLI | MCP | protocol verified, not tried in the client |
+| Hermes Agent | MCP, shell hook, or a Python plugin | untested |
+| Grok Build | renders images natively; termpeek adds PDFs, diffs and posts | untested |
 
-Only Claude Code has been verified end to end so far. The rest share the same
-constraint termpeek is built around — a TUI that captures stdout — so they
-should work, but reports are welcome. If your agent can run a shell command, it
-can use termpeek.
+Claude Code is verified end to end. The MCP server is verified at the protocol
+level — handshake, tool listing, calls, notifications, malformed input — but I
+have not driven it from Codex or Gemini myself, so those are marked accordingly.
+Reports welcome. If your agent can run a shell command or speak MCP, it can use
+termpeek.
 
 ## How this differs from what already exists
 

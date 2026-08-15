@@ -183,6 +183,43 @@ if command -v chafa >/dev/null 2>&1 && [[ -s "$FIX/test.png" ]]; then
   fi
 fi
 
+echo "== mcp server =="
+MCP="$ROOT/scripts/termpeek-mcp"
+if [[ -x "$MCP" ]] && command -v jq >/dev/null 2>&1; then
+  mcp() { printf '%s\n' "$@" | "$MCP" 2>/dev/null; }
+
+  init='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{}}}'
+  check "initialize returns a protocol" \
+    "$(mcp "$init" | jq -r 'select(.id==1) | .result.protocolVersion')" "2024-11-05"
+  check "server identifies itself" \
+    "$(mcp "$init" | jq -r 'select(.id==1) | .result.serverInfo.name')" "termpeek"
+  check "advertises four tools" \
+    "$(mcp '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | jq -r '.result.tools | length')" "4"
+  check "ping answers" \
+    "$(mcp '{"jsonrpc":"2.0","id":3,"method":"ping"}' | jq -r '.result | type')" "object"
+  check "unknown method is -32601" \
+    "$(mcp '{"jsonrpc":"2.0","id":4,"method":"nope"}' | jq -r '.error.code')" "-32601"
+  check "missing argument is a tool error" \
+    "$(mcp '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"preview","arguments":{}}}' | jq -r '.result.isError')" "true"
+
+  # Notifications carry no id. Answering one corrupts the stream, and clients
+  # send at least one (notifications/initialized) during every handshake.
+  check "notifications get no reply" \
+    "$(mcp '{"jsonrpc":"2.0","method":"notifications/initialized"}' '{"jsonrpc":"2.0","method":"x/y"}' | wc -c | tr -d ' ')" "0"
+
+  # A malformed line must not take the server down mid-session.
+  check "survives malformed input" \
+    "$(mcp 'not json' '{"jsonrpc":"2.0","id":6,"method":"ping"}' | jq -r 'select(.id==6) | .id')" "6"
+
+  # The tool must call termpeek, not return the picture to the model.
+  mcpstub="$(mktemp -d "${TMPDIR:-/tmp}/tp-mcp.XXXXXX")/stub.sh"
+  printf '#!/bin/sh\nexit 0\n' > "$mcpstub"; chmod +x "$mcpstub"
+  if [[ -s "$FIX/test.png" ]]; then
+    r="$(printf '%s\n' "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"preview\",\"arguments\":{\"path\":\"$FIX/test.png\"}}}" | TERMPEEK_BIN="$mcpstub" "$MCP" 2>/dev/null | jq -r '.result.content[0].text')"
+    case "$r" in *"Shown to the user"*) ok "preview reports back as text" ;; *) no "preview returned: $r" ;; esac
+  fi
+fi
+
 echo "== auto-preview hook =="
 HOOK="$ROOT/hooks/claude-code/auto-preview.sh"
 if [[ -x "$HOOK" ]] && command -v jq >/dev/null 2>&1; then
