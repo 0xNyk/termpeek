@@ -135,6 +135,9 @@ termpeek --gallery a.png report.pdf https://x.com/nykdotdev/status/20
 termpeek --carousel --wait 4 links/*.url     # one at a time
 ```
 
+Tiling needs `timg`. A carousel does not — it falls back to chafa alone, which
+matters on Linux, where `timg` is rarely packaged.
+
 ![Three X post cards tiled side by side in one terminal pane.](assets/readme/demo-gallery.png)
 
 ### The sidebar

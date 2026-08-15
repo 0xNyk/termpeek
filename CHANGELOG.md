@@ -35,6 +35,9 @@ All notable changes to termpeek are recorded here. Format follows
 - Contact sheets label cells with `%b`. timg has no page-number format
   specifier — `%f %b %w %h %D` is the whole set — so an invented `%02n` printed
   literally. Page numbers now live in the filename.
+- A carousel works without timg, falling back to chafa, since stepping through
+  items sequentially needs no tiling. Galleries still require timg, which most
+  Linux distributions do not package.
 - `--grid` is given explicit columns AND rows; `--grid=N` alone means an NxN
   grid and reserves far more vertical space than a few pages need.
 

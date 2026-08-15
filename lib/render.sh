@@ -411,7 +411,6 @@ tp_render_gallery() {
 # Carousel: one at a time, advancing on a timer. timg's -w is the wait between
 # images and --loops controls how many times it cycles.
 tp_render_carousel() {
-  command -v timg >/dev/null 2>&1 || { echo "termpeek: timg required for a carousel" >&2; return 127; }
   local proto="${TERMPEEK_PROTOCOL:-$(tp_detect_protocol)}"
   local wait="${TERMPEEK_CAROUSEL_WAIT:-3}"
   local loops="${TERMPEEK_LOOPS:-1}"
@@ -426,8 +425,25 @@ tp_render_carousel() {
   done
   (( ${#files[@]} )) || { echo "termpeek: nothing to show" >&2; return 66; }
 
-  timg -p "$(tp__timg_pixelation "$proto")" -g "$TP_GEOMETRY" \
-    -w "$wait" --loops="$loops" --title='%b' --clear=every "${files[@]}"
+  if command -v timg >/dev/null 2>&1; then
+    timg -p "$(tp__timg_pixelation "$proto")" -g "$TP_GEOMETRY" \
+      -w "$wait" --loops="$loops" --title='%b' --clear=every "${files[@]}"
+    return $?
+  fi
+
+  # A carousel is sequential, so unlike a gallery it does not need timg's
+  # tiling. chafa alone can do it, which keeps this working on systems where
+  # timg is not packaged (Linux distributions generally do not carry it).
+  local n=1 f
+  while (( n <= loops )) || (( loops < 0 )); do
+    for f in "${files[@]}"; do
+      printf '\033[2J\033[H'
+      printf '\033[2m%s\033[0m\n' "$(basename "$f")"
+      tp_render_image "$f" "$proto" || return $?
+      sleep "$wait"
+    done
+    (( loops < 0 )) || n=$(( n + 1 ))
+  done
 }
 
 # --- dispatch ---------------------------------------------------------------
