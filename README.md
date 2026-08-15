@@ -209,8 +209,15 @@ the trade for needing no setup; the other two backends exist for when it does.
 
 Chosen automatically; override with `-t`.
 
-**tmux** — a sidebar pane next to the agent. Previews reuse one pane, so the
-layout stays put no matter how many you open. Best experience.
+**tmux** — a sidebar pane next to the agent, for text: diffs and code. Previews
+reuse one pane, so the layout stays put no matter how many you open.
+
+Images do NOT go here, and cannot. tmux keeps no graphics in its screen buffer:
+`allow-passthrough` forwards the bytes, but the picture is not part of the
+pane's contents, so the first redraw erases it — and a pane that has just
+appeared redraws immediately. Text survives because text *is* the buffer.
+Pixel previews are therefore routed to a window that owns its own screen, even
+inside tmux. Override with `TERMPEEK_TMUX_PIXELS=1` if your setup disagrees.
 
 **window** — a separate terminal window. Always works, costs a focus change.
 This is the default when you're not in tmux.

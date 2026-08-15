@@ -6,6 +6,16 @@ All notable changes to termpeek are recorded here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Images no longer disappear inside tmux. tmux stores no graphics in its screen
+  buffer, so a kitty transmission is forwarded by `allow-passthrough` and then
+  erased by the next pane redraw. Confirmed by watching a sidebar receive 2653
+  correctly wrapped transmissions and display nothing but its footer, while a
+  diff in the same pane rendered perfectly. Transport is now chosen by content:
+  text to the sidebar, pixels to a window. `TERMPEEK_TMUX_PIXELS=1` restores the
+  old behaviour.
+
 ### Added
 
 - A demo video, built by `tools/make-demo-video.sh` from real command output,

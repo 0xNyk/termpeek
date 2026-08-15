@@ -185,9 +185,38 @@ tp_transport_inline() {
 }
 
 # --- dispatch ---------------------------------------------------------------
+# tmux keeps no graphics in its screen buffer. allow-passthrough forwards the
+# bytes, but the image is not part of the pane's contents, so the first redraw
+# erases it — and a pane that just appeared redraws immediately. Text survives
+# because text IS the buffer.
+#
+# Observed directly: chafa emitted 2653 correctly tmux-wrapped kitty
+# transmissions into a sidebar and the pane showed nothing but the footer,
+# while a diff in the same pane rendered perfectly.
+#
+# So the transport depends on WHAT is being shown, not just where we are. Text
+# goes to the sidebar; pixels go to a window that owns its own screen.
+tp_transport_for() {
+  local target="$1" transport="$2"
+  [[ "$transport" == "tmux" ]] || { printf '%s' "$transport"; return 0; }
+  [[ "${TERMPEEK_TMUX_PIXELS:-0}" == "1" ]] && { printf 'tmux'; return 0; }
+
+  case "$(tp_detect_type "$target")" in
+    diff|file|missing) printf 'tmux' ;;
+    *)
+      if [[ "$(tp_detect_protocol)" == "symbols" ]]; then
+        printf 'tmux'          # character art is text, so the sidebar is fine
+      else
+        printf 'window'
+      fi
+      ;;
+  esac
+}
+
 tp_show() {
   local target="$1"
   local transport="${2:-$(tp_detect_transport)}"
+  transport="$(tp_transport_for "$target" "$transport")"
 
   case "$transport" in
     tmux)   tp_transport_tmux   "$target" ;;
