@@ -73,6 +73,33 @@ tp_x_fetch_xint() {
 # The file is read straight into a request header. It is never echoed, never
 # written to logs, and never passed on a command line where it would show up in
 # the process list.
+# Pull one cookie out of a file. Split out from the fetch so it can be tested
+# with fixtures instead of a live session — the two accepted shapes are a plain
+# `name=value` line and a Netscape cookies.txt row, where the value is the last
+# tab-separated field.
+#
+# `ct0` must not match `ct0_something`, and `auth_token` must not be found
+# inside `x_auth_token`, so the name is anchored rather than merely searched for.
+tp_x_cookie_value() {
+  local file="$1" name="$2"
+  [[ -r "$file" ]] || return 1
+  awk -v name="$name" '
+    # Netscape format: domain, flag, path, secure, expiry, name, value
+    NF >= 7 && $(NF-1) == name { print $NF; exit }
+    {
+      # name=value, possibly among "; "-separated pairs on one line
+      n = split($0, pairs, /[;[:space:]]+/)
+      for (i = 1; i <= n; i++) {
+        if (index(pairs[i], name "=") == 1) {
+          v = substr(pairs[i], length(name) + 2)
+          gsub(/^["'"'"']|["'"'"']$/, "", v)
+          if (v != "") { print v; exit }
+        }
+      }
+    }
+  ' "$file" | head -1
+}
+
 tp_x_fetch_cookies() {
   local id="$1"
   local file="${TERMPEEK_X_COOKIE_FILE:-$HOME/.config/termpeek/x-cookies}"
@@ -87,8 +114,8 @@ tp_x_fetch_cookies() {
   esac
 
   local auth ct0
-  auth="$(awk -F'auth_token[=\t]+' '/auth_token/{print $2}' "$file" | awk '{print $1}' | tr -d '";' | head -1)"
-  ct0="$(awk -F'ct0[=\t]+' '/ct0/{print $2}' "$file" | awk '{print $1}' | tr -d '";' | head -1)"
+  auth="$(tp_x_cookie_value "$file" auth_token)"
+  ct0="$(tp_x_cookie_value "$file" ct0)"
   [[ -n "$auth" && -n "$ct0" ]] || {
     echo "termpeek: could not find auth_token and ct0 in the cookie file" >&2
     return 1

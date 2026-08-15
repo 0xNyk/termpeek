@@ -26,7 +26,7 @@ ROOT="$(cd -P "$(dirname "$tp__self")/.." && pwd)"
 TERMPEEK="${TERMPEEK_BIN:-$ROOT/scripts/termpeek}"
 
 PROTOCOL_DEFAULT="2024-11-05"
-SERVER_VERSION="0.1.0"
+SERVER_VERSION="$(cat "$ROOT/VERSION" 2>/dev/null || echo unknown)"
 
 command -v jq >/dev/null 2>&1 || {
   echo "termpeek-mcp: jq is required" >&2

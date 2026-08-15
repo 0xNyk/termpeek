@@ -45,6 +45,19 @@ git clone https://github.com/0xNyk/termpeek
 cd termpeek && ./install.sh
 ```
 
+There is also a bootstrap script, `get.sh`, which clones or updates the repo and
+runs the installer. Fetch it, read it, then run it — it is deliberately short:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/0xNyk/termpeek/main/get.sh -o get.sh
+less get.sh && sh get.sh
+```
+
+It clones a public repository and symlinks three scripts into `~/.local/bin`.
+Nothing else: no sudo, no shell profile edits, no daemons. Piping an installer
+straight into a shell is a habit worth not having, so it is not the headline
+instruction here.
+
 Renderers (Homebrew shown; all are widely packaged):
 
 ```bash

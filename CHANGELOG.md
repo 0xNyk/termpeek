@@ -6,6 +6,8 @@ All notable changes to termpeek are recorded here. Format follows
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-08-15
+
 ### Added
 
 - X/Twitter post preview. `termpeek <post-url>` renders the post as a card:
@@ -98,5 +100,6 @@ Behaviour worth knowing, each the result of a real bug:
 - Empty arrays are expanded as `${arr[@]+"${arr[@]}"}` throughout, because bash
   3.2 on macOS treats the bare form as an unbound variable under `set -u`.
 
-[Unreleased]: https://github.com/0xNyk/termpeek/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/0xNyk/termpeek/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/0xNyk/termpeek/releases/tag/v0.2.0
 [0.1.0]: https://github.com/0xNyk/termpeek/releases/tag/v0.1.0

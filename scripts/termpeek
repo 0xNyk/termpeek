@@ -23,6 +23,10 @@ done
 TERMPEEK_ROOT="$(cd -P "$(dirname "$tp__self")/.." && pwd)"
 export TERMPEEK_LIB="$TERMPEEK_ROOT/lib"
 
+# One source of truth. Two commands each hard-coding a string is how they end up
+# disagreeing after a release.
+tp_version() { cat "$TERMPEEK_ROOT/VERSION" 2>/dev/null || echo "unknown"; }
+
 # shellcheck source=../lib/probe.sh
 source "$TERMPEEK_LIB/probe.sh"
 # shellcheck source=../lib/render.sh
@@ -97,7 +101,7 @@ main() {
 
     case "$1" in
       -h|--help)      tp_usage; return 0 ;;
-      --version)      echo "termpeek 0.1.0"; return 0 ;;
+      --version)      echo "termpeek $(tp_version)"; return 0 ;;
       --probe)        mode="probe"; shift ;;
       --cache)        mode="cache"; shift ;;
       --clear-cache)  mode="clear-cache"; shift ;;

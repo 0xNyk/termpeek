@@ -23,6 +23,8 @@ check(){ if [[ "$2" == "$3" ]]; then ok "$1"; else no "$1 (want '$3', got '$2')"
 source "$ROOT/lib/probe.sh"
 # shellcheck source=../lib/render.sh
 source "$ROOT/lib/render.sh"
+# shellcheck source=../lib/x-fetch.sh
+source "$ROOT/lib/x-fetch.sh"
 
 echo "== fixtures =="
 # Regenerate if EITHER fixture is missing or empty — checking only one let a
@@ -96,9 +98,24 @@ if command -v chafa >/dev/null 2>&1 && [[ -f "$FIX/test.png" ]]; then
     "")          no "image/symbols produced nothing" ;;
     *)           ok "image/symbols emits character art" ;;
   esac
+  # The sixel branch has never run on this developer's terminal — Ghostty
+  # declines sixel by design — so assert the stream shape instead of the pixels.
+  # A sixel image is a DCS: ESC P <params> q, then raster attributes.
+  out="$(TP_GEOMETRY=20x10 tp_render_image "$FIX/test.png" sixel 2>/dev/null | head -c 200)"
+  case "$out" in
+    *$'\033'P*q*) ok "image/sixel emits a DCS sixel stream" ;;
+    *)            no "image/sixel produced no DCS introducer" ;;
+  esac
 else
   echo "  chafa or fixture missing; skipping image checks"
 fi
+
+echo "== timg pixelation mapping =="
+check "kitty -> k"   "$(tp__timg_pixelation kitty)"   "k"
+check "iterm -> i"   "$(tp__timg_pixelation iterm)"   "i"
+check "sixel -> s"   "$(tp__timg_pixelation sixel)"   "s"
+check "symbols -> q" "$(tp__timg_pixelation symbols)" "q"
+check "unknown -> q" "$(tp__timg_pixelation nonsense)" "q"
 
 echo "== video: no frozen frame when stdout is not a tty =="
 # Regression guard. timg silently renders ONE frame under kitty when the
@@ -116,9 +133,22 @@ else
   echo "  timg or fixture missing; skipping video checks"
 fi
 
+echo "== cookie backend =="
+# The cookie fetch needs a live session, but the parsing does not. These values
+# are invented; the point is which shapes are accepted and which names must NOT
+# match — ct0 should never be found inside ct0_backup.
+cookiedir="$(mktemp -d "${TMPDIR:-/tmp}/tp-ck.XXXXXX")"
+printf 'auth_token=AAAA1111\nct0=BBBB2222\n' > "$cookiedir/plain"
+printf 'auth_token=AAAA1111; ct0=BBBB2222; guest_id=v1\n' > "$cookiedir/oneline"
+printf '# Netscape HTTP Cookie File\n.x.com\tTRUE\t/\tTRUE\t0\tauth_token\tAAAA1111\n.x.com\tTRUE\t/\tTRUE\t0\tct0\tBBBB2222\n' > "$cookiedir/netscape"
+printf 'x_auth_token=WRONG\nct0_backup=WRONG\nauth_token=AAAA1111\nct0=BBBB2222\n' > "$cookiedir/tricky"
+for shape in plain oneline netscape tricky; do
+  check "cookie/$shape auth_token" "$(tp_x_cookie_value "$cookiedir/$shape" auth_token)" "AAAA1111"
+  check "cookie/$shape ct0"        "$(tp_x_cookie_value "$cookiedir/$shape" ct0)"        "BBBB2222"
+done
+check "cookie file absent" "$(tp_x_cookie_value /no/such/file auth_token 2>/dev/null || echo MISS)" "MISS"
+
 echo "== x/tweet =="
-# shellcheck source=../lib/x-fetch.sh
-source "$ROOT/lib/x-fetch.sh"
 check "url -> id"        "$(tp_x_id 'https://x.com/nykdotdev/status/1234567890')" "1234567890"
 check "url+query -> id"  "$(tp_x_id 'https://twitter.com/a/status/42?s=20&t=x')"  "42"
 check "bare id -> id"    "$(tp_x_id '99')" "99"
@@ -304,6 +334,23 @@ if [[ -x "$HOOK" ]] && command -v jq >/dev/null 2>&1; then
     fi
   fi
 fi
+
+echo "== version =="
+# Three places state a version. They drifted apart the moment there was more
+# than one, so VERSION is the only source and the rest read it.
+tp_ver="$(cat "$ROOT/VERSION" 2>/dev/null)"
+case "$tp_ver" in
+  [0-9]*.[0-9]*.[0-9]*) ok "VERSION holds a semver string" ;;
+  *)                    no "VERSION is not semver: '$tp_ver'" ;;
+esac
+check "--version matches VERSION" "$("$TP" --version)" "termpeek $tp_ver"
+if command -v jq >/dev/null 2>&1; then
+  check "mcp reports the same version" \
+    "$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+       | "$ROOT/scripts/termpeek-mcp" 2>/dev/null | jq -r '.result.serverInfo.version')" "$tp_ver"
+fi
+check "changelog documents this version" \
+  "$(grep -oE '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' "$ROOT/CHANGELOG.md" | head -1 | tr -d '#[] ')" "$tp_ver"
 
 echo "== cli =="
 check "no args -> 64"        "$("$TP" >/dev/null 2>&1; echo $?)" "64"
