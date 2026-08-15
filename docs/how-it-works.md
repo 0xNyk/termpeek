@@ -1,6 +1,6 @@
 # How it works
 
-Why the problem exists, how termpeek gets around it, and the three constraints
+Why the problem exists, how termpeek gets around it, and the four constraints
 that shaped the implementation. If you are changing rendering code, read the
 traps at the bottom first — every one of them cost real debugging time and is
 encoded in the source.
@@ -59,7 +59,7 @@ Use tmux there.
 
 For running termpeek by hand outside an agent, or piping its output somewhere.
 
-## Three traps worth knowing
+## Four traps worth knowing
 
 These are the constraints the implementation is built around. They are encoded
 in the code with comments; please don't undo them.
@@ -100,6 +100,19 @@ the pane down by one and the picture vanishes. A full-pane PDF that drew its
 header and nothing else was exactly this.
 
 See `tp__say` and `tp__fit_geometry` in `lib/render.sh`.
+
+### 4. A file being written renders as a truncated image, silently
+
+Measured: a PNG cut to 40 KB produced 648 KB of escape output, exit 0, empty
+stderr. Nothing distinguishes it from a good render except the picture.
+
+Reported by [@buskerrrrrr](https://x.com/buskerrrrrr): firing on create rather
+than on close catches half-written PNGs, and a browser capture gives no
+`.crdownload` marker to wait for, so a settled size is the only general signal.
+
+`tp__wait_stable` in `lib/render.sh` polls size and mtime until they hold still,
+but only for files touched in the last couple of seconds, so settled files cost
+nothing. It degrades to rendering rather than blocking.
 
 ## Why video is a filmstrip by default
 

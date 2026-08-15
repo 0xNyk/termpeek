@@ -804,9 +804,51 @@ tp_render_carousel() {
   done
 }
 
+# A file that is still being written renders as a truncated image with exit 0
+# and no warning — measured: a PNG cut to 40 KB produced 648 KB of escape output
+# and no stderr. Silent success on bad input is the failure mode this project
+# keeps hitting.
+#
+# Reported by @buskerrrrrr: firing on create rather than on close catches
+# half-written PNGs, and a browser capture gives no `.crdownload` marker to wait
+# for, so a settled size is the only general signal available.
+#
+# Only freshly-touched files can still be in flight, so anything older than a
+# couple of seconds skips the poll entirely and the common case stays free.
+# This never blocks a preview: on timeout it renders whatever is there.
+tp__wait_stable() {
+  local f="$1"
+  [[ -f "$f" ]] || return 0
+  [[ "${TERMPEEK_WAIT_STABLE:-1}" == "1" ]] || return 0
+
+  local mtime now age
+  mtime="$(tp__stat_mtime "$f")" || return 0
+  [[ "$mtime" =~ ^[0-9]+$ ]] || return 0
+  now="$(date +%s)"
+  age=$(( now - mtime ))
+  (( age > ${TERMPEEK_STABLE_FRESH_SECS:-2} )) && return 0
+
+  local tries="${TERMPEEK_STABLE_TRIES:-12}"
+  local interval="${TERMPEEK_STABLE_INTERVAL:-0.08}"
+  local last="" same=0 cur
+  while (( tries-- > 0 )); do
+    cur="$(tp__stat_meta "$f" 2>/dev/null)" || return 0
+    if [[ -n "$cur" && "$cur" == "$last" ]]; then
+      same=$(( same + 1 ))
+      (( same >= 2 )) && return 0
+    else
+      same=0
+    fi
+    last="$cur"
+    sleep "$interval"
+  done
+  return 0
+}
+
 # --- dispatch ---------------------------------------------------------------
 tp_render() {
   local target="$1" proto="${2:-$(tp_detect_protocol)}"
+  tp__wait_stable "$target"
   local kind; kind="$(tp_detect_type "$target")"
 
   case "$kind" in

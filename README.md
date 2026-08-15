@@ -236,7 +236,13 @@ A `PostToolUse` hook previews media the moment the agent writes it.
 ```
 
 Images, PDFs and video only — code and diffs are skipped, because the agent
-already shows you those. Repeats of the same file are suppressed for 20 seconds,
+already shows you those.
+
+Note the matcher: `Write|Edit|NotebookEdit`. Media an agent generates through a
+shell command (`ffmpeg`, `pdftoppm`, a plotting script) arrives via `Bash` and
+will **not** trigger this hook. Adding `Bash` to the matcher is not enough on
+its own, because a shell command can return while its output is still being
+flushed — that is the case the write-settle check exists for. Repeats of the same file are suppressed for 20 seconds,
 so a render loop opens one preview rather than forty. `TERMPEEK_AUTO_PREVIEW=0`
 turns it off. See [hooks/claude-code/README.md](hooks/claude-code/README.md).
 
@@ -253,6 +259,7 @@ Everything is an environment variable; none are required.
 | `TERMPEEK_STRIP_FRAMES` | frames sampled for the filmstrip | `4` |
 | `TERMPEEK_SUPERSAMPLE` | PDF raster multiple | `2` |
 | `TERMPEEK_MAX_PAYLOAD` | bytes before a render is scaled down | `8000000` |
+| `TERMPEEK_WAIT_STABLE` | `0` renders immediately instead of waiting for a file to finish writing | `1` |
 | `TERMPEEK_RENDERER` | `timg` to prefer timg outside tmux | chafa |
 | `TERMPEEK_COLS` | pin gallery columns | auto |
 | `TERMPEEK_SIDEBAR_WIDTH` | sidebar pane width | `45%` |
@@ -296,6 +303,11 @@ everywhere. tmux only buys you the sidebar.
 **Why doesn't my video move?** By design — the default is a filmstrip, because a
 still survives in the pane and an animation does not. `TERMPEEK_ANIMATE=1` plays
 it.
+
+**Can it preview a half-written file?** It waits for one. A file touched in the
+last couple of seconds is polled until its size and mtime settle, then rendered;
+older files skip the check entirely. On a slow writer it gives up and renders
+what is there rather than blocking. `TERMPEEK_WAIT_STABLE=0` turns it off.
 
 **A large preview came up empty.** Lower `TERMPEEK_MAX_PAYLOAD`. chafa transmits
 uncompressed RGBA, and tmux discards output once a pane's backlog gets large

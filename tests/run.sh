@@ -490,6 +490,53 @@ TERMPEEK_CELL_PX=15x35 tp__cap_geometry
 unset TP__ROWS_USED
 unset TP_GEOMETRY
 
+echo "== partial files =="
+# Reported by @buskerrrrrr: firing on create rather than on close catches
+# half-written PNGs, and a browser capture leaves no .crdownload marker to wait
+# for. Measured before the fix: a PNG truncated to 40KB rendered 648KB of escape
+# output with exit 0 and empty stderr. Silent success on bad input.
+if command -v ffmpeg >/dev/null 2>&1 && [[ -s "$FIX/test.png" ]]; then
+  pt="$(mktemp -d "${TMPDIR:-/tmp}/tp-partial.XXXXXX")"
+  # A settled file must not be delayed: only fresh files can still be in flight.
+  t0=$(date +%s)
+  ( TERMPEEK_LIB="$ROOT/lib"; tp__wait_stable "$FIX/test.png" )
+  t1=$(date +%s)
+  if (( t1 - t0 <= 1 )); then ok "settled file is not delayed"; else no "settled file waited $((t1-t0))s"; fi
+
+  # A file still growing must be waited on rather than rendered immediately.
+  : > "$pt/grow.bin"
+  ( for _ in 1 2 3 4; do head -c 8000 "$FIX/test.png" >> "$pt/grow.bin"; sleep 0.1; done ) >/dev/null 2>&1 &
+  gw=$!
+  sleep 0.05
+  g0=$(date +%s%N)
+  ( TERMPEEK_LIB="$ROOT/lib"; tp__wait_stable "$pt/grow.bin" )
+  g1=$(date +%s%N)
+  wait "$gw" 2>/dev/null
+  waited_ms=$(( (g1 - g0) / 1000000 ))
+  if (( waited_ms >= 150 )); then
+    ok "growing file is waited on (${waited_ms}ms)"
+  else
+    no "growing file was not waited on (${waited_ms}ms)"
+  fi
+
+  # The wait must never block a preview forever, however pathological the writer.
+  : > "$pt/forever.bin"
+  ( for _ in $(seq 1 60); do printf 'x' >> "$pt/forever.bin"; sleep 0.05; done ) >/dev/null 2>&1 &
+  fw=$!
+  f0=$(date +%s)
+  ( TERMPEEK_LIB="$ROOT/lib"; TERMPEEK_STABLE_TRIES=6 tp__wait_stable "$pt/forever.bin" )
+  f1=$(date +%s)
+  kill "$fw" 2>/dev/null; wait "$fw" 2>/dev/null
+  if (( f1 - f0 <= 4 )); then ok "wait degrades instead of blocking"; else no "wait blocked $((f1-f0))s"; fi
+
+  # The opt-out has to work, or an automated pipeline cannot turn it off.
+  o0=$(date +%s%N)
+  ( TERMPEEK_LIB="$ROOT/lib"; TERMPEEK_WAIT_STABLE=0 tp__wait_stable "$pt/grow.bin" )
+  o1=$(date +%s%N)
+  if (( (o1 - o0) / 1000000 < 100 )); then ok "TERMPEEK_WAIT_STABLE=0 disables the wait"; else no "opt-out ignored"; fi
+  rm -rf "$pt"
+fi
+
 echo
 printf 'passed %d, failed %d\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]]
