@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+# termpeek — preview images, video, PDFs, files, diffs and tweets from inside an
+# agent CLI that cannot render them itself.
+#
+# Usage:
+#   termpeek <file|url>            preview it
+#   termpeek --diff [git args...]  preview the working-tree diff
+#   termpeek --probe               report terminal capabilities
+#
+# See SKILL.md for the full contract.
+
+set -uo pipefail
+
+TERMPEEK_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export TERMPEEK_LIB="$TERMPEEK_ROOT/lib"
+
+# shellcheck source=../lib/probe.sh
+source "$TERMPEEK_LIB/probe.sh"
+# shellcheck source=../lib/render.sh
+source "$TERMPEEK_LIB/render.sh"
+# shellcheck source=../lib/transport.sh
+source "$TERMPEEK_LIB/transport.sh"
+
+tp_usage() {
+  cat <<'EOF'
+termpeek — media preview for agent CLIs
+
+  termpeek <file|url>              preview a file, PDF, video, or tweet URL
+  termpeek --diff [<git args>]     preview the working-tree diff
+  termpeek --probe                 print detected terminal capabilities
+  termpeek --version
+
+Options:
+  -g, --geometry <WxH>   size in character cells (default 80x40)
+  -p, --protocol <name>  kitty | iterm | sixel | symbols (default: detected)
+  -t, --transport <name> tmux | window | inline (default: detected)
+      --page <n>         PDF page to show (default 1)
+      --pages            PDF contact sheet: all pages as a thumbnail grid
+      --dpi <n>          PDF render DPI (overrides exact-pixel sizing)
+      --loops <n>        video loops (default 1, -1 = forever)
+      --here             render to stdout instead of using a transport
+
+Environment overrides mirror the flags: TERMPEEK_GEOMETRY, TERMPEEK_PROTOCOL,
+TERMPEEK_TRANSPORT, TERMPEEK_PDF_PAGE, TERMPEEK_PDF_DPI, TERMPEEK_LOOPS.
+EOF
+}
+
+main() {
+  local target="" mode="show" force_here=0
+  local -a gitargs=()
+
+  # Accept both `--opt value` and `--opt=value`. Splitting the `=` form up front
+  # keeps the case arms below to one spelling each.
+  #
+  # macOS ships bash 3.2, where expanding an empty array under `set -u` is a
+  # fatal "unbound variable" rather than an empty list. Hence the
+  # ${arr[@]+"${arr[@]}"} guard on every array expansion that can be empty.
+  local -a argv=()
+  local a
+  for a in "$@"; do
+    case "$a" in
+      --*=*) argv+=("${a%%=*}" "${a#*=}") ;;
+      *)     argv+=("$a") ;;
+    esac
+  done
+  set -- ${argv[@]+"${argv[@]}"}
+
+  while (( $# )); do
+    # Flags that take a value must see a real next argument. Checking $# is the
+    # only reliable test: passing "${2-}" would hand the callee an empty string,
+    # which is indistinguishable from a supplied empty value.
+    case "$1" in
+      -g|--geometry|-p|--protocol|-t|--transport|--page|--dpi|--loops)
+        if (( $# < 2 )) || [[ "$2" == -* ]]; then
+          echo "termpeek: $1 requires a value" >&2
+          return 64
+        fi
+        ;;
+    esac
+
+    case "$1" in
+      -h|--help)      tp_usage; return 0 ;;
+      --version)      echo "termpeek 0.1.0"; return 0 ;;
+      --probe)        mode="probe"; shift ;;
+      --diff)         mode="diff"; shift; gitargs=(${1+"$@"}); break ;;
+      --here)         force_here=1; shift ;;
+      -g|--geometry)  export TERMPEEK_GEOMETRY="$2"; shift 2 ;;
+      -p|--protocol)  export TERMPEEK_PROTOCOL="$2"; shift 2 ;;
+      -t|--transport) export TERMPEEK_TRANSPORT="$2"; shift 2 ;;
+      --page)         export TERMPEEK_PDF_PAGE="$2"; shift 2 ;;
+      --pages)        mode="sheet"; shift ;;
+      --dpi)          export TERMPEEK_PDF_DPI="$2"; shift 2 ;;
+      --loops)        export TERMPEEK_LOOPS="$2"; shift 2 ;;
+      --)             shift; target="${1:-}"; break ;;
+      -*)             echo "termpeek: unknown option: $1" >&2; tp_usage >&2; return 64 ;;
+      *)              target="$1"; shift ;;
+    esac
+  done
+
+  # Consumed by the renderers in lib/render.sh, which are sourced above.
+  # shellcheck disable=SC2034
+  TP_GEOMETRY="${TERMPEEK_GEOMETRY:-80x40}"
+
+  case "$mode" in
+    probe)
+      tp_probe_report
+      return 0
+      ;;
+    diff)
+      # A diff is text, so it can be written straight to the agent's transcript
+      # when no richer transport exists — unlike pixels, it survives that.
+      if (( force_here )) || [[ "$(tp_detect_transport)" == "none" ]]; then
+        tp_render_git_diff ${gitargs[@]+"${gitargs[@]}"}
+        return $?
+      fi
+      local tmp; tmp="$(mktemp "${TMPDIR:-/tmp}/termpeek-diff.XXXXXX.diff")" || return 1
+      if ! git diff ${gitargs[@]+"${gitargs[@]}"} > "$tmp" 2>/dev/null || [[ ! -s "$tmp" ]]; then
+        git diff --cached ${gitargs[@]+"${gitargs[@]}"} > "$tmp" 2>/dev/null
+      fi
+      if [[ ! -s "$tmp" ]]; then
+        rm -f "$tmp"; echo "termpeek: no changes to show"; return 0
+      fi
+      tp_show "$tmp"
+      return $?
+      ;;
+  esac
+
+  if [[ -z "$target" ]]; then
+    tp_usage >&2
+    return 64
+  fi
+
+  if [[ "$mode" == "sheet" ]]; then
+    if (( force_here )); then
+      tp_render_pdf_sheet "$target"
+    else
+      TERMPEEK_RENDER_MODE=sheet tp_show "$target"
+    fi
+    return $?
+  fi
+
+  if (( force_here )); then
+    tp_render "$target"
+  else
+    tp_show "$target"
+  fi
+}
+
+main "$@"

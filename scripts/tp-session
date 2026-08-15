@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# tp-session — run an agent CLI inside tmux so termpeek gets a sidebar.
+#
+# Without tmux, termpeek falls back to spawning a separate OS window: it works,
+# but it steals focus and lands outside the conversation. Inside tmux, previews
+# open in a pane beside the agent and stay there.
+#
+# This wrapper exists so that is the default rather than something to remember:
+#
+#   tp-session              # claude, in tmux, sidebar ready
+#   tp-session codex        # any agent CLI
+#   tp-session --attach     # reattach to the running session
+#
+# It deliberately does NOT modify your tmux config. allow-passthrough is set on
+# the server it starts (kitty graphics do not survive tmux without it).
+
+set -uo pipefail
+
+TERMPEEK_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SESSION="${TP_SESSION_NAME:-agent}"
+
+usage() {
+  cat <<'EOF'
+tp-session — run an agent CLI inside tmux with a termpeek sidebar
+
+  tp-session [<agent> [args...]]   start (default: claude)
+  tp-session --attach              attach to the existing session
+  tp-session --kill                kill the session
+
+The agent runs in the left pane. termpeek previews open on the right and reuse
+that one pane, so the layout stays stable no matter how many things you preview.
+EOF
+}
+
+have_session() { tmux has-session -t "$SESSION" 2>/dev/null; }
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+  --attach)  have_session || { echo "tp-session: no session '$SESSION'" >&2; exit 1; }
+             exec tmux attach -t "$SESSION" ;;
+  --kill)    tmux kill-session -t "$SESSION" 2>/dev/null && echo "killed '$SESSION'" || echo "no session '$SESSION'"
+             exit 0 ;;
+esac
+
+command -v tmux >/dev/null 2>&1 || { echo "tp-session: tmux not installed (brew install tmux)" >&2; exit 127; }
+
+AGENT="${1:-claude}"
+[[ $# -gt 0 ]] && shift
+
+if ! command -v "$AGENT" >/dev/null 2>&1; then
+  echo "tp-session: '$AGENT' not found on PATH" >&2
+  exit 127
+fi
+
+if have_session; then
+  echo "tp-session: attaching to existing session '$SESSION'"
+  exec tmux attach -t "$SESSION"
+fi
+
+# Record the host terminal's graphics protocol BEFORE tmux rewrites TERM.
+# Inside tmux, TERM becomes tmux-256color and TERM_PROGRAM becomes "tmux", so
+# detection would otherwise downgrade to character art on a terminal that
+# supports full pixels.
+# shellcheck source=../lib/probe.sh
+source "$TERMPEEK_ROOT/lib/probe.sh"
+tp_record_host_protocol 2>/dev/null || true
+HOST_PROTO="$(tp_detect_protocol)"
+
+tmux new-session -d -s "$SESSION" -c "$PWD" "$AGENT" ${1+"$@"}
+tmux set -g allow-passthrough on 2>/dev/null
+tmux set-environment -t "$SESSION" TERMPEEK_HOST_PROTOCOL "$HOST_PROTO" 2>/dev/null
+tmux set-environment -t "$SESSION" PATH "$TERMPEEK_ROOT/scripts:$PATH" 2>/dev/null
+
+echo "tp-session: '$SESSION' started — agent=$AGENT protocol=$HOST_PROTO"
+exec tmux attach -t "$SESSION"
