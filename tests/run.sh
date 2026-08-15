@@ -377,6 +377,65 @@ if command -v chafa >/dev/null 2>&1 && [[ -s "$FIX/test.png" ]]; then
   "$TP" --here -g 12x6 --loops 1 "$FIX/test.png" >/dev/null 2>&1 && ok "--loops 1 accepted" || no "--loops 1 rejected"
 fi
 
+echo "== one renderer inside a multiplexer =="
+# Every bug this section covers presented as "the preview did not show at all",
+# because each failure fell back silently instead of erroring.
+check "passthrough under tmux"  "$(TMUX=/tmp/x,1,0 tp__passthrough)" "tmux"
+check "passthrough bare"        "$(TMUX= STY= tp__passthrough)"      "none"
+check "chafa chosen in tmux"    "$(TMUX=/tmp/x,1,0 tp__use_chafa && echo yes || echo no)" "yes"
+check "timg honoured when asked" \
+  "$(TMUX=/tmp/x,1,0 TERMPEEK_RENDERER=timg tp__use_chafa && echo yes || echo no)" "no"
+
+# Supersampling is the difference between a crisp PDF page and a soft one.
+TP_GEOMETRY=70x30
+check "display px"      "$(TERMPEEK_CELL_PX=8x16 tp__display_px)"   "560x480"
+check "display px 2x"   "$(TERMPEEK_CELL_PX=8x16 tp__display_px 2)" "1120x960"
+
+if command -v ffmpeg >/dev/null 2>&1 && command -v ffprobe >/dev/null 2>&1; then
+  mt="$(mktemp -d "${TMPDIR:-/tmp}/tp-mtg.XXXXXX")"
+  # ffmpeg cannot decode SVG. The resolver hands SVGs straight through because
+  # chafa reads them, so composing a gallery without rasterising first made
+  # xstack fail and the tiled path fell back to timg, which emits no usable
+  # payload inside tmux. That looked exactly like "the X cards did not show".
+  if command -v rsvg-convert >/dev/null 2>&1; then
+    printf '%s' '<svg xmlns="http://www.w3.org/2000/svg" width="700" height="340"><rect width="700" height="340" fill="#3b82f6"/></svg>' > "$mt/a.svg"
+    cp "$mt/a.svg" "$mt/b.svg"
+    if ( TP_GEOMETRY=70x30 TERMPEEK_CELL_PX=8x16 tp__montage "$mt/grid.png" 2 "$mt/a.svg" "$mt/b.svg" ); then
+      ok "montage composes SVG inputs"
+      # Tile height must follow the content's aspect ratio. Splitting the box
+      # height evenly instead padded wide cards into tall boxes and spent most
+      # of the pane on background.
+      gh="$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "$mt/grid.png" 2>/dev/null)"
+      if [[ "$gh" =~ ^[0-9]+$ ]] && (( gh < 500 )); then
+        ok "montage tile follows content aspect"
+      else
+        no "montage tile ignored aspect (height $gh, expected ~272)"
+      fi
+    else
+      no "montage failed on SVG inputs"
+    fi
+  fi
+  # A single input must still produce a file: the n==1 branch takes a different
+  # filter path than xstack and is easy to break without noticing.
+  if [[ -s "$FIX/test.png" ]]; then
+    ( TP_GEOMETRY=70x30 TERMPEEK_CELL_PX=8x16 tp__montage "$mt/one.png" 1 "$FIX/test.png" ) \
+      && [[ -s "$mt/one.png" ]] && ok "montage handles a single input" || no "montage failed on one input"
+  fi
+  # timg will not enlarge a small source, so a 240x136 clip drew 15x5 cells in a
+  # 70x30 pane. The GIF path must scale UP to the pane's real width.
+  if [[ -s "$FIX/anim.mp4" ]]; then
+    if ( TP_GEOMETRY=70x30 TERMPEEK_CELL_PX=8x16 tp__video_gif "$FIX/anim.mp4" "$mt/v.gif" ) \
+       && [[ -s "$mt/v.gif" ]]; then
+      vw="$(ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "$mt/v.gif" 2>/dev/null | head -1)"
+      check "video gif scaled to pane width" "$vw" "560"
+    else
+      no "video gif not produced"
+    fi
+  fi
+  rm -rf "$mt"
+fi
+unset TP_GEOMETRY
+
 echo
 printf 'passed %d, failed %d\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]]
