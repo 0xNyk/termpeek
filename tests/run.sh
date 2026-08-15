@@ -97,6 +97,47 @@ else
   echo "  timg or fixture missing; skipping video checks"
 fi
 
+echo "== x/tweet =="
+# shellcheck source=../lib/x-fetch.sh
+source "$ROOT/lib/x-fetch.sh"
+check "url -> id"        "$(tp_x_id 'https://x.com/nykdotdev/status/1234567890')" "1234567890"
+check "url+query -> id"  "$(tp_x_id 'https://twitter.com/a/status/42?s=20&t=x')"  "42"
+check "bare id -> id"    "$(tp_x_id '99')" "99"
+check "not a post -> ''" "$(tp_x_id 'https://example.com/hello')" ""
+# The syndication token is derived, not guessed; this value is fixed for id 20.
+check "token derivation" "$(tp_x_token 20)" "6dq1a2xwd93"
+
+# Normalization must flatten every backend to one shape, so the card renderer
+# never learns three schemas. Fixtures, so this stays offline.
+if command -v jq >/dev/null 2>&1; then
+  synd='{"user":{"name":"Nyk","screen_name":"nykdotdev","is_blue_verified":true,"profile_image_url_https":"https://x/a.jpg"},"text":"hello","created_at":"2026-08-15T09:41:00.000Z","favorite_count":128,"conversation_count":9}'
+  check "syndication -> handle" "$(printf '%s' "$synd" | tp_x_normalize | jq -r .handle)" "nykdotdev"
+  check "syndication -> likes"  "$(printf '%s' "$synd" | tp_x_normalize | jq -r .likes)"  "128"
+  v2='{"data":{"text":"hi","created_at":"2026-08-15T09:41:00.000Z","public_metrics":{"like_count":7,"reply_count":2,"retweet_count":1}},"includes":{"users":[{"name":"Nyk","username":"nykdotdev","profile_image_url":"https://x/a.jpg"}]}}'
+  check "api v2 -> handle" "$(printf '%s' "$v2" | tp_x_normalize | jq -r .handle)" "nykdotdev"
+  check "api v2 -> likes"  "$(printf '%s' "$v2" | tp_x_normalize | jq -r .likes)"  "7"
+  check "junk -> nothing"  "$(printf '%s' '{"nope":1}' | tp_x_normalize)" ""
+fi
+
+# Card rendering must not require network: --from-json is the offline path.
+if command -v jq >/dev/null 2>&1; then
+  cj="$FIX/card.json"
+  printf '%s' '{"name":"Nyk","handle":"nykdotdev","verified":true,"avatar":"","text":"a & b <c> \"d\"","created":"2026-08-15T09:41:00.000Z","likes":1234,"replies":5,"reposts":6,"media":[]}' > "$cj"
+  "$ROOT/scripts/tweet-card" --from-json "$cj" --out "$FIX/card.svg" >/dev/null 2>&1
+  if [[ -s "$FIX/card.svg" ]]; then
+    ok "card renders from json"
+    # XML injection guard: raw &, < and > in post text must not reach the SVG.
+    if grep -q '&amp;' "$FIX/card.svg" && ! grep -qE '<c>' "$FIX/card.svg"; then
+      ok "card escapes xml in post text"
+    else
+      no "card leaked unescaped xml"
+    fi
+    grep -q '1.2K' "$FIX/card.svg" && ok "card abbreviates counts" || no "card did not abbreviate 1234"
+  else
+    no "card did not render"
+  fi
+fi
+
 echo "== cli =="
 check "no args -> 64"        "$("$TP" >/dev/null 2>&1; echo $?)" "64"
 check "missing value -> 64"  "$("$TP" --here -g >/dev/null 2>&1; echo $?)" "64"

@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+# tweet-card — render an X/Twitter post as a card.
+#
+#   tweet-card https://x.com/nykdotdev/status/123    # fetch and render
+#   tweet-card --from-json card.json                 # render a saved record
+#
+# Prints the path of the generated SVG. chafa rasterizes SVG directly, so there
+# is no PNG step and no headless browser anywhere in this path.
+
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=../lib/x-fetch.sh
+source "$ROOT/lib/x-fetch.sh"
+
+WIDTH="${TERMPEEK_CARD_WIDTH:-900}"
+WRAP="${TERMPEEK_CARD_WRAP:-52}"        # characters per line at the body size
+OUT="${TERMPEEK_CARD_OUT:-}"
+
+usage() { sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; }
+
+# XML escaping. Ampersand first, or it double-escapes the entities below it.
+esc() {
+  printf '%s' "$1" \
+    | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' \
+          -e 's/"/\&quot;/g' -e "s/'/\&apos;/g"
+}
+
+# Compact counts the way the site does: 1234 -> 1.2K
+human() {
+  awk -v n="${1:-0}" 'BEGIN{
+    if (n >= 1000000) printf "%.1fM", n/1000000
+    else if (n >= 1000) printf "%.1fK", n/1000
+    else printf "%d", n
+  }' | sed 's/\.0//'
+}
+
+# Backends disagree on date format: syndication and the v2 API return ISO 8601,
+# while statuses/show returns the older ctime-style form. Normalize to the
+# site's own display format, and fall back to the raw string rather than
+# printing nothing when neither date(1) dialect can parse it.
+fmt_date() {
+  local in="$1" out=""
+  [[ -n "$in" ]] || return 0
+  local iso="${in%%.*}"; iso="${iso%Z}"
+  # BSD date (macOS)
+  out="$(date -j -f '%Y-%m-%dT%H:%M:%S' "$iso" '+%-I:%M %p · %b %-d, %Y' 2>/dev/null)"
+  [[ -z "$out" ]] && out="$(date -j -f '%a %b %d %H:%M:%S %z %Y' "$in" '+%-I:%M %p · %b %-d, %Y' 2>/dev/null)"
+  # GNU date
+  [[ -z "$out" ]] && out="$(date -d "$in" '+%-I:%M %p · %b %-d, %Y' 2>/dev/null)"
+  printf '%s' "${out:-$in}"
+}
+
+# Avatars are embedded as data URIs so the SVG stays self-contained; librsvg
+# will not fetch remote images. If anything fails we fall back to initials,
+# which is why this never returns an error.
+avatar_href() {
+  local url="$1"
+  [[ -n "$url" ]] || return 1
+  command -v curl >/dev/null 2>&1 || return 1
+  local tmp; tmp="$(mktemp "${TMPDIR:-/tmp}/tp-avatar.XXXXXX")" || return 1
+  if curl -fsS --max-time 8 "$url" -o "$tmp" 2>/dev/null && [[ -s "$tmp" ]]; then
+    local mime="image/jpeg"
+    case "$url" in *.png) mime="image/png" ;; *.webp) mime="image/webp" ;; esac
+    printf 'data:%s;base64,%s' "$mime" "$(base64 < "$tmp" | tr -d '\n')"
+    rm -f "$tmp"; return 0
+  fi
+  rm -f "$tmp"; return 1
+}
+
+main() {
+  local src="" json=""
+  while (( $# )); do
+    case "$1" in
+      -h|--help)   usage; return 0 ;;
+      --from-json) json="${2:?--from-json needs a path}"; shift 2 ;;
+      --out)       OUT="${2:?--out needs a path}"; shift 2 ;;
+      --width)     WIDTH="${2:?}"; shift 2 ;;
+      -*)          echo "tweet-card: unknown option: $1" >&2; return 64 ;;
+      *)           src="$1"; shift ;;
+    esac
+  done
+
+  local rec
+  if [[ -n "$json" ]]; then
+    [[ -r "$json" ]] || { echo "tweet-card: cannot read $json" >&2; return 66; }
+    rec="$(cat "$json")"
+  else
+    [[ -n "$src" ]] || { usage >&2; return 64; }
+    local id; id="$(tp_x_id "$src")"
+    [[ -n "$id" ]] || { echo "tweet-card: could not find a post id in '$src'" >&2; return 65; }
+    rec="$(tp_x_fetch "$id")" || return 1
+  fi
+
+  command -v jq >/dev/null 2>&1 || { echo "tweet-card: jq is required" >&2; return 127; }
+
+  local name handle verified avatar text created likes replies reposts
+  name="$(printf '%s' "$rec"     | jq -r '.name // "unknown"')"
+  handle="$(printf '%s' "$rec"   | jq -r '.handle // ""')"
+  verified="$(printf '%s' "$rec" | jq -r '.verified // false')"
+  avatar="$(printf '%s' "$rec"   | jq -r '.avatar // ""')"
+  text="$(printf '%s' "$rec"     | jq -r '.text // ""')"
+  created="$(printf '%s' "$rec"  | jq -r '.created // ""')"
+  likes="$(printf '%s' "$rec"    | jq -r '.likes // 0')"
+  replies="$(printf '%s' "$rec"  | jq -r '.replies // 0')"
+  reposts="$(printf '%s' "$rec"  | jq -r '.reposts // 0')"
+
+  # Wrap the body, then size the card to the text rather than guessing.
+  local wrapped; wrapped="$(printf '%s' "$text" | fold -s -w "$WRAP")"
+  local lines;   lines="$(printf '%s\n' "$wrapped" | wc -l | tr -d ' ')"
+  (( lines < 1 )) && lines=1
+  local line_h=34
+  local body_top=176
+  local height=$(( body_top + lines * line_h + 96 ))
+
+  local out="${OUT:-$(mktemp "${TMPDIR:-/tmp}/tp-card.XXXXXX").svg}"
+
+  {
+    cat <<SVGHEAD
+<svg xmlns="http://www.w3.org/2000/svg" width="$WIDTH" height="$height" viewBox="0 0 $WIDTH $height" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <rect width="$WIDTH" height="$height" rx="20" fill="#000000" stroke="#2f3336" stroke-width="2"/>
+SVGHEAD
+
+    local href
+    if href="$(avatar_href "$avatar")"; then
+      # A circle filled from a pattern, not an <image> with clip-path: librsvg
+      # ignores the clip here and renders a square avatar.
+      printf '  <defs><pattern id="avp" patternUnits="userSpaceOnUse" x="54" y="54" width="68" height="68"><image href="%s" width="68" height="68" preserveAspectRatio="xMidYMid slice"/></pattern></defs>\n' "$href"
+      printf '  <circle cx="88" cy="88" r="34" fill="url(#avp)"/>\n'
+    else
+      local initial; initial="$(printf '%s' "$name" | cut -c1 | tr '[:lower:]' '[:upper:]')"
+      printf '  <circle cx="88" cy="88" r="34" fill="#1d9bf0"/>\n'
+      printf '  <text x="88" y="99" font-size="30" font-weight="700" fill="#fff" text-anchor="middle">%s</text>\n' "$(esc "$initial")"
+    fi
+
+    printf '  <text x="140" y="82" font-size="21" font-weight="700" fill="#e7e9ea">%s</text>\n' "$(esc "$name")"
+    if [[ "$verified" == "true" ]]; then
+      # Badge sits after the name. Bold 21px averages ~12px per character; the
+      # extra 16 is the gap plus the badge radius, so short names do not get
+      # their last letter covered.
+      local vx=$(( 140 + ${#name} * 12 + 16 ))
+      printf '  <circle cx="%s" cy="75" r="10" fill="#1d9bf0"/>\n' "$vx"
+      printf '  <path d="M%s 75.5 l3.5 3.5 l6.5 -7.5" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>\n' "$(( vx - 5 ))"
+    fi
+    printf '  <text x="140" y="110" font-size="18" fill="#71767b">@%s</text>\n' "$(esc "$handle")"
+    # The X wordmark, scaled into the top-right corner. Two crossing strokes
+    # read as a close button, which is not what this is.
+    printf '  <g transform="translate(%s,58) scale(0.032)" fill="#e7e9ea"><path d="M714 519 L1160 0 H1054 L667 450 L358 0 H0 L468 681 L0 1227 H106 L515 751 L842 1227 H1200 L714 519 Z"/></g>\n' \
+      "$(( WIDTH - 96 ))"
+
+    local y=$body_top
+    printf '%s\n' "$wrapped" | while IFS= read -r line; do
+      printf '  <text x="54" y="%s" font-size="25" fill="#e7e9ea">%s</text>\n' "$y" "$(esc "$line")"
+      y=$(( y + line_h ))
+    done
+
+    local meta_y=$(( body_top + lines * line_h + 34 ))
+    printf '  <line x1="54" y1="%s" x2="%s" y2="%s" stroke="#2f3336" stroke-width="1.5"/>\n' \
+      "$(( meta_y - 26 ))" "$(( WIDTH - 54 ))" "$(( meta_y - 26 ))"
+    printf '  <text x="54" y="%s" font-size="17" fill="#71767b">%s</text>\n' "$meta_y" "$(esc "$(fmt_date "$created")")"
+    printf '  <text x="%s" y="%s" font-size="17" fill="#71767b" text-anchor="end">%s replies · %s reposts · %s likes</text>\n' \
+      "$(( WIDTH - 54 ))" "$meta_y" "$(human "$replies")" "$(human "$reposts")" "$(human "$likes")"
+
+    printf '</svg>\n'
+  } > "$out"
+
+  printf '%s\n' "$out"
+}
+
+main "$@"

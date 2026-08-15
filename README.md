@@ -10,10 +10,11 @@ agent can see it. You can't.
 termpeek doesn't fight the TUI. It renders where the TUI never repaints.
 
 ```bash
-termpeek screenshot.png      # image, full pixels
-termpeek clip.mp4            # video, actual motion
-termpeek report.pdf          # rendered page, not a filename
-termpeek --diff              # what changed, side by side
+termpeek ~/Desktop/dashboard-v3.png              # image, full pixels
+termpeek out/onboarding-demo.mp4                 # video, actual motion
+termpeek docs/2026-q3-report.pdf                 # rendered page, not a filename
+termpeek https://x.com/nykdotdev/status/20       # the post, as a card
+termpeek --diff HEAD~1                           # what changed, side by side
 ```
 
 ![Without termpeek the agent TUI captures stdout, strips escapes and repaints over the PTY, so you see a filename. With termpeek the render happens outside the TUI, in a tmux sidebar or separate window.](assets/readme/how-it-works.png)
@@ -55,11 +56,13 @@ brew install tmux            # optional, gives the best transport
 ## Usage
 
 ```bash
-termpeek <file|url>            # detect type, pick transport, show it
-termpeek --diff                # working-tree diff
-termpeek --diff HEAD~3         # any git diff arguments
-termpeek --pages doc.pdf       # contact sheet of every page
-termpeek --probe               # what your terminal actually supports
+termpeek out/latency-by-region.png       # detect type, pick transport, show it
+termpeek --diff                          # working-tree diff
+termpeek --diff HEAD~3 -- src/           # any git diff arguments
+termpeek --pages docs/2026-q3-report.pdf # contact sheet of every page
+termpeek --page 4 docs/spec.pdf          # a specific page
+termpeek https://x.com/nykdotdev/status/20
+termpeek --probe                         # what your terminal actually supports
 ```
 
 | Flag | Meaning | Default |
@@ -82,6 +85,46 @@ termpeek --probe               # what your terminal actually supports
 | PDF | pdftoppm → chafa | rasterized at exact display size, framed as a page |
 | Diffs | delta | syntax highlighted, side-by-side when wide enough |
 | Code | bat | syntax highlighting and line numbers |
+| X posts | SVG → chafa | avatar, badge, text, counts — no API key needed |
+
+## X posts
+
+Paste a link, see the post. No API key, no browser, no login.
+
+```bash
+termpeek https://x.com/nykdotdev/status/20
+```
+
+![An X post rendered as a card: avatar, name, verified badge, post text, timestamp and engagement counts.](assets/readme/tweet-card.png)
+
+*Example render.* The card is generated as SVG and handed straight to chafa,
+which rasterizes SVG natively — so this path adds no browser, no headless
+Chrome, and no JavaScript toolchain.
+
+Three ways to fetch, tried in order:
+
+| Backend | Needs | Use when |
+|---|---|---|
+| `syndication` | nothing | default — the endpoint behind embedded posts |
+| `xint` | an X API key | you already run [xint](https://github.com/0xNyk/xint) and want the official API |
+| `cookies` | a logged-in session | posts the first two can't reach |
+
+Pin one with `TERMPEEK_X_BACKEND=xint`.
+
+For the cookie backend, put `auth_token` and `ct0` in a file and point at it:
+
+```bash
+chmod 600 ~/.config/termpeek/x-cookies
+export TERMPEEK_X_COOKIE_FILE=~/.config/termpeek/x-cookies
+```
+
+Cookies are session credentials. termpeek reads the file straight into a request
+header — never echoes it, never logs it, and never puts it on a command line
+where it would appear in the process list. It warns if the file is readable by
+anyone but you.
+
+The syndication endpoint is undocumented and can change without notice. That is
+the trade for needing no setup; the other two backends exist for when it does.
 
 ## What a session looks like
 
@@ -90,16 +133,16 @@ You keep talking to the agent. Previews appear beside it and stay there.
 ```console
 $ tp-session                       # claude, in tmux, sidebar ready
 
-  ┌ claude ─────────────────────┐ ┌ termpeek ──────────┐
-  │ > plot the latency data     │ │                    │
-  │                             │ │   [ the chart,     │
-  │ Wrote chart.png             │ │     in pixels ]    │
-  │ ⏵ termpeek chart.png        │ │                    │
-  │                             │ │                    │
-  │ > now show me the diff      │ │                    │
-  │ ⏵ termpeek --diff           │ │   [ side-by-side   │
-  │                             │ │     diff ]         │
-  └─────────────────────────────┘ └────────────────────┘
+  ┌ claude ──────────────────────────┐ ┌ termpeek ──────────┐
+  │ > chart p95 latency by region    │ │                    │
+  │                                  │ │   [ the chart,     │
+  │ Wrote out/latency-by-region.png  │ │     in pixels ]    │
+  │ ⏵ termpeek out/latency-by-…png   │ │                    │
+  │                                  │ │                    │
+  │ > ok, what did you change?       │ │   [ side-by-side   │
+  │ ⏵ termpeek --diff                │ │     diff of        │
+  │                                  │ │     metrics.ts ]   │
+  └──────────────────────────────────┘ └────────────────────┘
 ```
 
 The sidebar is one pane, reused. Ten previews later the layout is unchanged.

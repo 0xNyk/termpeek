@@ -6,6 +6,28 @@ All notable changes to termpeek are recorded here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- X/Twitter post preview. `termpeek <post-url>` renders the post as a card:
+  avatar, verified badge, wrapped text, timestamp and counts.
+- Three fetch backends, tried in order — the no-auth syndication endpoint, the
+  X API v2 via `xint`, and cookie auth for posts the others cannot reach. Pin
+  one with `TERMPEEK_X_BACKEND`; all three normalize to a single record shape so
+  the renderer only knows one schema.
+- Diagrams in the README, generated from committed SVG via `rsvg-convert`.
+
+### Notes
+
+- The card is authored as SVG and handed to chafa, which rasterizes SVG through
+  librsvg. No headless browser and no JavaScript toolchain in this path.
+- The syndication token is derived from the post id in `awk`, so tweet preview
+  adds no scripting-language dependency.
+- Cookie credentials are read from a file into a request header. They are never
+  echoed, logged, or placed on a command line where the process list would
+  expose them; termpeek warns if the file is group- or world-readable.
+- Avatars are a circle filled from an SVG `<pattern>`, not an `<image>` with a
+  `clip-path` — librsvg ignores the clip and renders a square.
+
 ## [0.1.0] — 2026-08-15
 
 First release.

@@ -58,7 +58,12 @@ Options:
 | PDF | `pdftoppm` → `chafa` | high-DPI raster, white page, border, page counter |
 | Diff | `delta` | syntax highlighted, side-by-side when wide enough |
 | Code/text | `bat` | syntax highlighting, line numbers |
-| Tweets | `scripts/tweet-card` → `chafa` | fetch, render card to PNG, display |
+| X posts | `scripts/tweet-card` → `chafa` | fetch, render an SVG card, display |
+
+For an X post, pass the URL: `scripts/termpeek https://x.com/user/status/123`.
+Fetching tries the no-auth syndication endpoint first, then `xint` if it is
+installed, then cookie auth if `TERMPEEK_X_COOKIE_FILE` is set. Pin one with
+`TERMPEEK_X_BACKEND`.
 
 ## Transports
 
