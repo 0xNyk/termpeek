@@ -10,3 +10,6 @@ tests/fixtures/
 **/.DS_Store
 .idea/
 .vscode/
+
+# Agent scratch
+.claude/

@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="400" viewBox="0 0 1100 400" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <rect width="1100" height="400" rx="14" fill="#0d1117"/>
+
+  <text x="40" y="52" font-size="24" font-weight="700" fill="#e6edf3">Three ways to reach your eyes</text>
+  <text x="40" y="80" font-size="15" fill="#7d8590">Detected automatically. Override with <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" fill="#8b949e">-t</tspan>.</text>
+
+  <!-- tmux sidebar -->
+  <rect x="40" y="110" width="330" height="250" rx="12" fill="#161b22" stroke="#3fb950"/>
+  <text x="64" y="142" font-size="15" font-weight="700" fill="#3fb950">tmux sidebar</text>
+  <text x="64" y="163" font-size="12.5" fill="#7d8590">preferred</text>
+
+  <rect x="64" y="178" width="160" height="130" rx="6" fill="#0d1117" stroke="#30363d"/>
+  <text x="80" y="200" font-size="11.5" fill="#8b949e">agent</text>
+  <rect x="80" y="212" width="120" height="5" rx="2" fill="#30363d"/>
+  <rect x="80" y="225" width="96" height="5" rx="2" fill="#30363d"/>
+  <rect x="80" y="238" width="128" height="5" rx="2" fill="#30363d"/>
+  <rect x="80" y="251" width="72" height="5" rx="2" fill="#30363d"/>
+
+  <rect x="232" y="178" width="114" height="130" rx="6" fill="#0d1117" stroke="#3fb950"/>
+  <text x="246" y="200" font-size="11.5" fill="#3fb950">preview</text>
+  <rect x="246" y="212" width="86" height="66" rx="3" fill="#1f6feb" opacity="0.5"/>
+  <circle cx="272" cy="238" r="12" fill="#58a6ff" opacity="0.8"/>
+
+  <text x="64" y="332" font-size="12.5" fill="#7d8590">One pane, reused. Layout stays put.</text>
+  <text x="64" y="350" font-size="12.5" fill="#7d8590">No window switch.</text>
+
+  <!-- separate window -->
+  <rect x="390" y="110" width="330" height="250" rx="12" fill="#161b22" stroke="#30363d"/>
+  <text x="414" y="142" font-size="15" font-weight="700" fill="#58a6ff">separate window</text>
+  <text x="414" y="163" font-size="12.5" fill="#7d8590">default outside tmux</text>
+
+  <rect x="414" y="178" width="170" height="118" rx="6" fill="#0d1117" stroke="#30363d"/>
+  <text x="430" y="200" font-size="11.5" fill="#8b949e">agent</text>
+  <rect x="430" y="212" width="122" height="5" rx="2" fill="#30363d"/>
+  <rect x="430" y="225" width="94" height="5" rx="2" fill="#30363d"/>
+  <rect x="430" y="238" width="130" height="5" rx="2" fill="#30363d"/>
+
+  <rect x="524" y="216" width="170" height="118" rx="6" fill="#0d1117" stroke="#58a6ff"/>
+  <text x="540" y="238" font-size="11.5" fill="#58a6ff">preview</text>
+  <rect x="540" y="250" width="138" height="66" rx="3" fill="#1f6feb" opacity="0.5"/>
+
+  <text x="414" y="352" font-size="12.5" fill="#7d8590">Always available. Costs a focus change.</text>
+
+  <!-- inline -->
+  <rect x="740" y="110" width="320" height="250" rx="12" fill="#161b22" stroke="#30363d"/>
+  <text x="764" y="142" font-size="15" font-weight="700" fill="#8b949e">inline</text>
+  <text x="764" y="163" font-size="12.5" fill="#7d8590">running it by hand</text>
+
+  <rect x="764" y="178" width="272" height="130" rx="6" fill="#0d1117" stroke="#30363d"/>
+  <text x="780" y="200" font-size="11.5" fill="#8b949e">your shell</text>
+  <rect x="780" y="212" width="150" height="5" rx="2" fill="#30363d"/>
+  <rect x="780" y="228" width="200" height="60" rx="3" fill="#1f6feb" opacity="0.5"/>
+
+  <text x="764" y="332" font-size="12.5" fill="#7d8590">Straight to stdout. No agent in the way,</text>
+  <text x="764" y="350" font-size="12.5" fill="#7d8590">so nothing to escape.</text>
+</svg>
