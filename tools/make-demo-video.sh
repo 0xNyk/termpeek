@@ -122,10 +122,10 @@ still_clip "$WORK/s3.png" 3.8 "$WORK/clips/3-diff.mp4"
 
 if [[ -s "$OUT/report.pdf" ]]; then
   pdftoppm -r 150 -png -f 1 -l 1 -aa yes -aaVector yes "$OUT/report.pdf" "$WORK/pg" 2>/dev/null
-  src="$(find "$WORK" -maxdepth 1 -name 'pg-*.png' -print -quit)"
-  if [[ -n "$src" ]]; then
-    ( source "$ROOT/lib/render.sh"; tp__pdf_frame "$src" "$WORK/page.png" ) >/dev/null 2>&1 \
-      || cp "$src" "$WORK/page.png"
+  page_src="$(find "$WORK" -maxdepth 1 -name 'pg-*.png' -print -quit)"
+  if [[ -n "$page_src" ]]; then
+    ( source "$ROOT/lib/render.sh"; tp__pdf_frame "$page_src" "$WORK/page.png" ) >/dev/null 2>&1 \
+      || cp "$page_src" "$WORK/page.png"
     printf '\033[2m$\033[0m termpeek q3-report.pdf\n' | ansi_png "$WORK/h4.png" 44
     stack "$WORK/h4.png" "$WORK/page.png" "$WORK/s4.png" \
       && still_clip "$WORK/s4.png" 3.6 "$WORK/clips/4-pdf.mp4"

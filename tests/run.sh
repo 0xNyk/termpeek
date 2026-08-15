@@ -381,7 +381,7 @@ echo "== one renderer inside a multiplexer =="
 # Every bug this section covers presented as "the preview did not show at all",
 # because each failure fell back silently instead of erroring.
 check "passthrough under tmux"  "$(TMUX=/tmp/x,1,0 tp__passthrough)" "tmux"
-check "passthrough bare"        "$(TMUX= STY= tp__passthrough)"      "none"
+check "passthrough bare"        "$(TMUX='' STY='' tp__passthrough)"  "none"
 check "chafa chosen in tmux"    "$(TMUX=/tmp/x,1,0 tp__use_chafa && echo yes || echo no)" "yes"
 check "timg honoured when asked" \
   "$(TMUX=/tmp/x,1,0 TERMPEEK_RENDERER=timg tp__use_chafa && echo yes || echo no)" "no"
@@ -432,8 +432,62 @@ if command -v ffmpeg >/dev/null 2>&1 && command -v ffprobe >/dev/null 2>&1; then
       no "video gif not produced"
     fi
   fi
+  # A tiled view must pick the layout that makes tiles BIGGEST for the pane it
+  # lands in. Three wide cards side by side in a narrow sidebar came out ~26
+  # columns each and unreadable; the same three stacked are ~3x wider.
+  if command -v rsvg-convert >/dev/null 2>&1 && [[ -s "$mt/a.svg" ]]; then
+    cp "$mt/a.svg" "$mt/c.svg"
+    narrow=""; wide=""
+    ( TP_GEOMETRY=81x40 TERMPEEK_CELL_PX=8x16 tp__montage "$mt/n.png" auto "$mt/a.svg" "$mt/b.svg" "$mt/c.svg" ) 2>/dev/null \
+      && narrow="$(ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "$mt/n.png" 2>/dev/null)"
+    ( TP_GEOMETRY=200x40 TERMPEEK_CELL_PX=8x16 tp__montage "$mt/w.png" auto "$mt/a.svg" "$mt/b.svg" "$mt/c.svg" ) 2>/dev/null \
+      && wide="$(ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "$mt/w.png" 2>/dev/null)"
+    # A narrow pane stacks (grid no wider than one tile); a wide pane does not.
+    if [[ "$narrow" =~ ^[0-9]+$ ]] && (( narrow < 1000 )); then
+      ok "narrow pane stacks tiles"
+    else
+      no "narrow pane did not stack (grid width $narrow)"
+    fi
+    if [[ "$wide" =~ ^[0-9]+$ ]] && (( wide > 2000 )); then
+      ok "wide pane spreads tiles"
+    else
+      no "wide pane did not spread (grid width $wide)"
+    fi
+  fi
+  # A video preview must leave something on screen. Animation drew a
+  # correctly-sized but blank box, so the default is a still filmstrip.
+  if [[ -s "$FIX/anim.mp4" ]]; then
+    sd="$mt/strip"; mkdir -p "$sd"
+    ( TP_GEOMETRY=70x30 tp__video_strip "$FIX/anim.mp4" "$sd" ) >/dev/null 2>&1
+    shots="$(find "$sd" -name 'shot-*.png' 2>/dev/null | wc -l | tr -d ' ')"
+    if [[ "$shots" =~ ^[0-9]+$ ]] && (( shots >= 2 )); then
+      ok "video strip samples frames ($shots)"
+    else
+      no "video strip produced $shots frames"
+    fi
+  fi
   rm -rf "$mt"
 fi
+
+# Text printed before an image has to shrink it, or the image's last row
+# scrolls the pane and the scroll erases every kitty image in it.
+TP_GEOMETRY=81x42
+# shellcheck disable=SC2034  # read by tp__say/tp__fit_geometry in lib/render.sh
+TP__ROWS_USED=0
+tp__say '' >/dev/null; tp__say '' >/dev/null
+tp__fit_geometry
+check "text ahead of an image shrinks it" "$TP_GEOMETRY" "81x40"
+
+# The payload cap is a safety valve: it must not touch an ordinary pane, but
+# must engage once a HiDPI cell makes the same pane several times heavier.
+TP_GEOMETRY=81x41
+TERMPEEK_CELL_PX=8x16 tp__cap_geometry
+check "cap leaves a normal pane alone" "$TP_GEOMETRY" "81x41"
+TP_GEOMETRY=81x41
+TERMPEEK_CELL_PX=15x35 tp__cap_geometry
+[[ "$TP_GEOMETRY" != "81x41" ]] && ok "cap engages on a HiDPI cell ($TP_GEOMETRY)" \
+                                || no "cap never engaged"
+unset TP__ROWS_USED
 unset TP_GEOMETRY
 
 echo

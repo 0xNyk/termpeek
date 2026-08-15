@@ -92,9 +92,68 @@ tp__display_px() {
   printf '%sx%s' "$w" "$h"
 }
 
+# Lines printed ahead of an image steal rows from it. Size the image to the
+# full pane anyway and its last row pushes the pane down by one — and that
+# scroll is a redraw, which erases every kitty image in the pane. It looked
+# like "the PDF did not show at all" while a shorter render beside it was fine.
+#
+# chafa also ends its output with a newline, so the budget needs one spare row
+# beyond whatever we print ourselves.
+tp__say() {
+  # shellcheck disable=SC2059  # callers pass a format string deliberately
+  printf "$@"
+  TP__ROWS_USED=$(( ${TP__ROWS_USED:-0} + 1 ))
+}
+
+tp__fit_geometry() {
+  local used="${TP__ROWS_USED:-0}"
+  (( used > 0 )) || return 0
+  local c="${TP_GEOMETRY%%x*}" r="${TP_GEOMETRY##*x}"
+  [[ "$r" =~ ^[0-9]+$ ]] || return 0
+  r=$(( r - used ))
+  (( r < 4 )) && r=4
+  TP_GEOMETRY="${c}x${r}"
+}
+
+# A safety valve, not a routine downgrade.
+#
+# chafa transmits kitty images as UNCOMPRESSED RGBA (f=32, no o=z), so the
+# payload is cells x cell_pixels x 4, base64'd — roughly 5.4 bytes per pixel.
+# tmux stops reading a pane and discards output once its backlog grows large
+# enough, which truncates the transmission and leaves a correctly-sized but
+# empty box.
+#
+# The default is deliberately generous. The blank PDF that prompted this was
+# better explained by scrolling (see tp__fit_geometry) than by volume, and the
+# only volume evidence available — 1.79 MB drew, 3.02 MB did not — came from
+# headless runs where chafa assumed a 10x20 cell, so it does not transfer to a
+# HiDPI terminal. Capping tightly on that basis would trade real resolution for
+# a hypothesis. Lower TERMPEEK_MAX_PAYLOAD if a large preview comes up empty.
+tp__cap_geometry() {
+  local budget="${TERMPEEK_MAX_PAYLOAD:-8000000}"
+  (( budget > 0 )) || return 0
+  local c="${TP_GEOMETRY%%x*}" r="${TP_GEOMETRY##*x}"
+  [[ "$c" =~ ^[0-9]+$ && "$r" =~ ^[0-9]+$ ]] || return 0
+  local cell cpx cpy
+  cell="$(tp__cell_pixels)"
+  cpx="$(printf '%s' "$cell" | cut -dx -f1)"
+  cpy="$(printf '%s' "$cell" | cut -dx -f2)"
+  [[ "$cpx" =~ ^[0-9]+$ && "$cpy" =~ ^[0-9]+$ ]] || return 0
+
+  local est=$(( c * cpx * r * cpy * 54 / 10 ))
+  (( est > budget )) || return 0
+  # Shrink both dimensions by sqrt(budget/est) so the aspect ratio holds.
+  local scaled
+  scaled="$(awk -v c="$c" -v r="$r" -v b="$budget" -v e="$est" \
+    'BEGIN{f=sqrt(b/e); nc=int(c*f); nr=int(r*f);
+           if(nc<10)nc=10; if(nr<5)nr=5; print nc"x"nr}')"
+  [[ "$scaled" == *x* ]] && TP_GEOMETRY="$scaled"
+}
+
 tp__chafa() {
   local target="$1" proto="$2"; shift 2
   local fmt="$proto"; [[ "$fmt" == "sixel" ]] && fmt="sixels"
+  tp__cap_geometry
   chafa -f "$fmt" --passthrough "$(tp__passthrough)" --size "$TP_GEOMETRY" \
     "$@" "$target"
 }
@@ -136,6 +195,39 @@ tp__montage() {
   set -- "${src[@]}"
 
   local n=$#
+  local box bw bh
+  box="$(tp__display_px 2)"
+  bw="$(printf '%s' "$box" | cut -dx -f1)"
+  bh="$(printf '%s' "$box" | cut -dx -f2)"
+
+  local dims sw sh
+  dims="$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height \
+          -of csv=p=0 "$1" 2>/dev/null)"
+  sw="${dims%%,*}"; sh="${dims##*,}"
+  [[ "$sw" =~ ^[0-9]+$ ]] && (( sw > 0 )) || sw=0
+  [[ "$sh" =~ ^[0-9]+$ ]] || sh=0
+
+  # Pick the column count that makes each tile BIGGEST, rather than assuming
+  # one row. Three wide cards laid side by side in a narrow sidebar came out
+  # ~26 columns each and the text was unreadable; stacked, they are ~3x larger.
+  # A wide pane still chooses a row, because there the row wins on area.
+  if [[ "$cols" == "auto" ]]; then
+    local best=1 bestarea=0 c r tw2 th2 area
+    for (( c = 1; c <= n; c++ )); do
+      r=$(( (n + c - 1) / c ))
+      tw2=$(( bw / c ))
+      if (( sw > 0 )); then th2=$(( tw2 * sh / sw )); else th2=$(( bh / r )); fi
+      (( th2 > 0 )) || continue
+      if (( r * th2 > bh )); then
+        tw2=$(( tw2 * bh / (r * th2) ))
+        th2=$(( bh / r ))
+      fi
+      area=$(( tw2 * th2 ))
+      if (( area > bestarea )); then bestarea=$area; best=$c; fi
+    done
+    cols=$best
+  fi
+
   (( cols > n )) && cols=$n
   (( cols > 0 )) || cols=1
   local rows=$(( (n + cols - 1) / cols ))
@@ -143,22 +235,10 @@ tp__montage() {
   # Tile width comes from the box; tile HEIGHT comes from the content's own
   # aspect ratio. Splitting the box's height evenly instead padded three wide
   # cards into tall boxes and spent most of the pane on background.
-  local box bw bh tw th
-  box="$(tp__display_px 2)"
-  bw="$(printf '%s' "$box" | cut -dx -f1)"
-  bh="$(printf '%s' "$box" | cut -dx -f2)"
+  local tw th
   tw=$(( bw / cols ))
   (( tw > 16 )) || tw=16
-
-  local dims sw sh
-  dims="$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height \
-          -of csv=p=0 "$1" 2>/dev/null)"
-  sw="${dims%%,*}"; sh="${dims##*,}"
-  if [[ "$sw" =~ ^[0-9]+$ ]] && [[ "$sh" =~ ^[0-9]+$ ]] && (( sw > 0 )); then
-    th=$(( tw * sh / sw ))
-  else
-    th=$(( bh / rows ))
-  fi
+  if (( sw > 0 )); then th=$(( tw * sh / sw )); else th=$(( bh / rows )); fi
   (( th > 16 )) || th=16
 
   # Never let the assembled grid exceed the box, or chafa shrinks the whole
@@ -197,14 +277,35 @@ tp__montage() {
   return $rc
 }
 
+# Sample N frames evenly across a clip. Seeking to explicit timestamps rather
+# than using an fps filter means the strip covers the whole clip even when the
+# duration is short, and each shot is a real decoded frame.
+tp__video_strip() {
+  local vsrc="$1" dir="$2"
+  local n="${TERMPEEK_STRIP_FRAMES:-4}"
+  local secs
+  secs="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$vsrc" 2>/dev/null)"
+  secs="${secs%%.*}"; [[ "$secs" =~ ^[0-9]+$ ]] || secs=0
+
+  local i got=0 at
+  for (( i = 0; i < n; i++ )); do
+    # Spread across the clip but skip the very start and end, which are often
+    # a blank first frame or a fade.
+    at=$(( secs * (i * 2 + 1) / (n * 2) ))
+    ffmpeg -y -ss "$at" -i "$vsrc" -frames:v 1 \
+      "$(printf '%s/shot-%02d.png' "$dir" "$i")" >/dev/null 2>&1 && got=$(( got + 1 ))
+  done
+  (( got > 0 ))
+}
+
 # Video -> animated GIF at the pane's real pixel width, then chafa. Beats
 # handing timg the file directly on both counts that matter here: the
 # transmission survives tmux, and ffmpeg will scale a small source UP.
 tp__video_gif() {
-  local src="$1" dst="$2"
+  local vsrc="$1" dst="$2"
   local fps="${TERMPEEK_VIDEO_FPS:-12}"
   local w; w="$(tp__display_px | cut -dx -f1)"
-  ffmpeg -y -i "$src" -vf \
+  ffmpeg -y -i "$vsrc" -vf \
 "fps=${fps},scale=${w}:-2:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4" \
     -loop 0 "$dst" >/dev/null 2>&1
 }
@@ -248,7 +349,28 @@ tp__timg_pixelation() {
 tp_render_video() {
   local target="$1" proto="${2:-$(tp_detect_protocol)}" loops="${TERMPEEK_LOOPS:-1}"
 
-  # Preferred path inside a multiplexer: GIF via ffmpeg, played by chafa.
+  # Inside a multiplexer, a STILL filmstrip is the default and animation is
+  # opt-in. Playing the GIF left a correctly-sized but blank box in the pane:
+  # chafa redraws each frame in place and what remains once it exits does not
+  # survive, whereas a single still persists exactly like an image preview.
+  # A strip of frames also reads better in a narrow sidebar than 4s of motion
+  # the user has to be looking at to catch.
+  if tp__use_chafa && tp_is_pixel_protocol "$proto" \
+     && command -v ffmpeg >/dev/null 2>&1 && command -v chafa >/dev/null 2>&1 \
+     && [[ "${TERMPEEK_ANIMATE:-0}" != "1" ]]; then
+    local tmp; tmp="$(mktemp -d "${TMPDIR:-/tmp}/termpeek-strip.XXXXXX")" || return 1
+    if tp__video_strip "$target" "$tmp"; then
+      local -a shots=(); local s
+      while IFS= read -r s; do [[ -n "$s" ]] && shots+=("$s"); done \
+        < <(find "$tmp" -name 'shot-*.png' | sort)
+      if (( ${#shots[@]} )) && tp__montage "$tmp/strip.png" "auto" "${shots[@]}"; then
+        tp_render_image "$tmp/strip.png" "$proto"
+        local rc=$?; rm -rf "$tmp"; return $rc
+      fi
+    fi
+    rm -rf "$tmp"
+  fi
+
   if tp__use_chafa && tp_is_pixel_protocol "$proto" \
      && command -v ffmpeg >/dev/null 2>&1 && command -v chafa >/dev/null 2>&1; then
     local tmp; tmp="$(mktemp -d "${TMPDIR:-/tmp}/termpeek-vid.XXXXXX")" || return 1
@@ -332,9 +454,9 @@ tp__cell_pixels() {
 # Done with ffmpeg because it is already a dependency; ImageMagick is not
 # installed and this needs no more than pad + drawbox.
 tp__pdf_frame() {
-  local src="$1" dst="$2" m="${TERMPEEK_PDF_MARGIN:-24}"
+  local psrc="$1" dst="$2" m="${TERMPEEK_PDF_MARGIN:-24}"
   command -v ffmpeg >/dev/null 2>&1 || return 1
-  ffmpeg -y -i "$src" -vf \
+  ffmpeg -y -i "$psrc" -vf \
     "color=white:s=1x1[bg];[bg][0:v]scale2ref[b][v];[b][v]overlay=shortest=1,pad=iw+${m}*2:ih+${m}*2:${m}:${m}:white,drawbox=x=${m}-1:y=${m}-1:w=iw-${m}*2+2:h=ih-${m}*2+2:color=0x9a9a9a:t=2" \
     -frames:v 1 "$dst" >/dev/null 2>&1
 }
@@ -356,12 +478,13 @@ tp_render_pdf() {
       "${TERMPEEK_PDF_DPI:-auto}" "$TP_GEOMETRY" "$(tp__cell_pixels)")"
     local hit; hit="$(tp_cache_get render "$ckey")"
     if [[ -n "$hit" ]]; then
-      printf '\033[1m%s\033[0m  \033[2m·  PDF  ·  page %s of %s\033[0m\n' \
+      tp__say '\033[1m%s\033[0m  \033[2m·  PDF  ·  page %s of %s\033[0m\n' \
         "$(basename "$target")" "$page" "$pages"
       if [[ "$pages" != "?" && "$pages" != "1" ]]; then
-        printf '\033[2m[ page %s of %s — --page <n> to move, --pages for contact sheet ]\033[0m\n' \
+        tp__say '\033[2m[ page %s of %s — --page <n> to move, --pages for contact sheet ]\033[0m\n' \
           "$page" "$pages"
       fi
+      tp__fit_geometry
       tp_render_image "$hit" "$proto"
       return $?
     fi
@@ -411,14 +534,15 @@ tp_render_pdf() {
         tp__pdf_frame "$png" "$framed" || framed="$png"
         framed="$(tp_cache_put render "$ckey" "$framed")"
 
-        printf '\033[1m%s\033[0m  \033[2m·  PDF  ·  page %s of %s\033[0m\n' \
+        tp__say '\033[1m%s\033[0m  \033[2m·  PDF  ·  page %s of %s\033[0m\n' \
           "$(basename "$target")" "$page" "$pages"
         # Counter BEFORE the image: printing after it forces a tmux redraw and
         # tmux does not re-send graphics, so the page would vanish.
         if [[ "$pages" != "?" && "$pages" != "1" ]]; then
-          printf '\033[2m[ page %s of %s — --page <n> to move, --pages for contact sheet ]\033[0m\n' \
+          tp__say '\033[2m[ page %s of %s — --page <n> to move, --pages for contact sheet ]\033[0m\n' \
             "$page" "$pages"
         fi
+        tp__fit_geometry
         tp_render_image "$framed" "$proto"
         local rc=$?
         rm -rf "$tmp"
@@ -464,7 +588,7 @@ tp_render_pdf_sheet() {
 
   printf '\033[1m%s\033[0m  \033[2m·  PDF  ·  %s pages' "$(basename "$target")" "$pages"
   [[ "$pages" != "?" ]] && (( pages > last )) && printf ' (showing first %s)' "$last"
-  printf '\033[0m\n'
+  tp__say '\033[0m\n'
 
   # shellcheck disable=SC2012
   local -a files; while IFS= read -r f; do files+=("$f"); done < <(ls "$tmp"/page*.png 2>/dev/null | sort)
@@ -476,7 +600,8 @@ tp_render_pdf_sheet() {
   (( rows < 1 )) && rows=1
 
   if tp__use_chafa && tp_is_pixel_protocol "$proto"; then
-    if tp__montage "$tmp/sheet.png" "$cols" "${files[@]}"; then
+    tp__fit_geometry
+    if tp__montage "$tmp/sheet.png" "${TERMPEEK_PDF_COLS:-auto}" "${files[@]}"; then
       tp_render_image "$tmp/sheet.png" "$proto"
       local rc=$?; rm -rf "$tmp"; return $rc
     fi
@@ -630,7 +755,7 @@ tp_render_gallery() {
 
   if tp__use_chafa && tp_is_pixel_protocol "$proto"; then
     local tmp; tmp="$(mktemp -d "${TMPDIR:-/tmp}/termpeek-gal.XXXXXX")" || return 1
-    if tp__montage "$tmp/grid.png" "$cols" "${files[@]}"; then
+    if tp__montage "$tmp/grid.png" "${TERMPEEK_COLS:-auto}" "${files[@]}"; then
       tp_render_image "$tmp/grid.png" "$proto"
       local rc=$?; rm -rf "$tmp"; return $rc
     fi
