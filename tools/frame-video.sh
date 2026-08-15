@@ -4,13 +4,17 @@
 #   tools/frame-video.sh <in.mp4> <out.mp4>
 #
 # A raw terminal capture is a dark rectangle; on a timeline it reads as a
-# screenshot someone forgot to crop. This composites it onto a mesh gradient,
-# rounds the corners, and adds a title bar — the look people expect from a
-# product clip, without recording any actual window chrome.
+# screenshot someone forgot to crop. This composites it onto an animated mesh
+# gradient, genuinely rounds its corners, and adds a title bar.
 #
-# Not recording the chrome is the point: window edges are where the Dock, the
-# menu bar and other windows bleed in. The frame here is drawn, so it cannot
-# contain anything but the terminal.
+# The chrome is drawn rather than filmed. Window edges are exactly where the
+# Dock, tab bars and other windows bleed in, so recording them is the one thing
+# worth avoiding.
+#
+# Env:
+#   TP_FRAME_TITLE   title bar text            (default: termpeek)
+#   TP_FRAME_STATIC  1 to skip the animation   (default: animated)
+#   TP_FRAME_TRIM    crop trailing blank rows  (default: 1)
 
 set -uo pipefail
 
@@ -20,18 +24,21 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/tp-frame.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 W=1280; H=720
-PAD="${TP_FRAME_PAD:-56}"        # gradient visible around the terminal
-BAR=34                            # title bar height
-RADIUS=14
+PAD=52
+BAR=36
+RADIUS=16
 TITLE="${TP_FRAME_TITLE:-termpeek}"
+BG_FPS=25
+BG_SECS=8                       # loop length; longer looks less repetitive
 
 command -v rsvg-convert >/dev/null 2>&1 || { echo "rsvg-convert required" >&2; exit 127; }
 
 IW="$(ffprobe -v error -select_streams v:0 -show_entries stream=width  -of csv=p=0 "$IN")"
 IH="$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "$IN")"
+DUR="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$IN")"
 [[ -n "$IW" && -n "$IH" ]] || { echo "cannot read $IN" >&2; exit 1; }
 
-# Fit the capture inside the padded area, leaving room for the title bar.
+# Fit inside the padded area, leaving room for the title bar.
 AVAIL_W=$(( W - PAD * 2 ))
 AVAIL_H=$(( H - PAD * 2 - BAR ))
 VW=$AVAIL_W
@@ -49,61 +56,104 @@ CY=$(( (H - CARD_H) / 2 ))
 VX=$CX
 VY=$(( CY + BAR ))
 
-# The frame: a full-canvas mesh gradient with a hole punched where the video
-# goes, plus the title bar drawn on top. Overlaying this ABOVE the video means
-# the rounded corners and the bar mask the capture rather than being composited
-# under it, which is what makes the corners actually look round.
-cat > "$WORK/frame.svg" <<SVG
-<svg xmlns="http://www.w3.org/2000/svg" width="$W" height="$H" viewBox="0 0 $W $H">
-  <defs>
-    <radialGradient id="g1" cx="12%" cy="18%" r="70%">
-      <stop offset="0%" stop-color="#7c3aed"/><stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="g2" cx="88%" cy="12%" r="65%">
-      <stop offset="0%" stop-color="#2563eb"/><stop offset="100%" stop-color="#2563eb" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="g3" cx="80%" cy="92%" r="70%">
-      <stop offset="0%" stop-color="#0ea5e9"/><stop offset="100%" stop-color="#0ea5e9" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="g4" cx="18%" cy="88%" r="65%">
-      <stop offset="0%" stop-color="#db2777"/><stop offset="100%" stop-color="#db2777" stop-opacity="0"/>
-    </radialGradient>
-    <mask id="hole">
-      <rect width="$W" height="$H" fill="#fff"/>
-      <rect x="$VX" y="$VY" width="$VW" height="$VH" fill="#000"/>
-    </mask>
-  </defs>
+# --- animated mesh ----------------------------------------------------------
+# Four colour blobs drifting on sine paths. Each frame is a still; the phase is
+# a full period across BG_SECS so the loop is seamless rather than jumping.
+mkdir -p "$WORK/bg"
+FRAMES=$(( BG_FPS * BG_SECS ))
+python3 - "$WORK/bg" "$FRAMES" "$W" "$H" <<'PY'
+import math, sys
+out, frames, W, H = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+blobs = [
+    ("#7c3aed", 0.16, 0.20, 0.10, 0.07, 0.00),
+    ("#2563eb", 0.84, 0.16, 0.09, 0.08, 1.30),
+    ("#06b6d4", 0.80, 0.86, 0.11, 0.06, 2.40),
+    ("#db2777", 0.18, 0.84, 0.08, 0.09, 3.60),
+]
+for f in range(frames):
+    t = 2 * math.pi * f / frames
+    defs, rects = [], []
+    for i, (col, cx, cy, ax, ay, ph) in enumerate(blobs):
+        x = cx + ax * math.sin(t + ph)
+        y = cy + ay * math.cos(t * 0.8 + ph)
+        r = 0.62 + 0.06 * math.sin(t * 1.3 + ph)
+        defs.append(
+            f'<radialGradient id="g{i}" cx="{x*100:.2f}%" cy="{y*100:.2f}%" r="{r*100:.1f}%">'
+            f'<stop offset="0%" stop-color="{col}" stop-opacity="0.95"/>'
+            f'<stop offset="100%" stop-color="{col}" stop-opacity="0"/></radialGradient>')
+        rects.append(f'<rect width="{W}" height="{H}" fill="url(#g{i})"/>')
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}">'
+           f'<defs>{"".join(defs)}</defs>'
+           f'<rect width="{W}" height="{H}" fill="#070912"/>'
+           f'{"".join(rects)}'
+           # A dark wash keeps the card readable against the brightest blobs.
+           f'<rect width="{W}" height="{H}" fill="#05070f" opacity="0.34"/>'
+           f'</svg>')
+    open(f"{out}/{f:04d}.svg", "w").write(svg)
+PY
 
-  <g mask="url(#hole)">
-    <rect width="$W" height="$H" fill="#0b1020"/>
-    <rect width="$W" height="$H" fill="url(#g1)"/>
-    <rect width="$W" height="$H" fill="url(#g2)"/>
-    <rect width="$W" height="$H" fill="url(#g3)"/>
-    <rect width="$W" height="$H" fill="url(#g4)"/>
-    <rect width="$W" height="$H" fill="#000" opacity="0.30"/>
-    <!-- the card: rounded, so its corners cover the square video beneath -->
-    <rect x="$CX" y="$CY" width="$CARD_W" height="$CARD_H" rx="$RADIUS" fill="#0d1117"/>
-  </g>
+if [[ "${TP_FRAME_STATIC:-0}" == "1" ]]; then
+  rsvg-convert -w "$W" -h "$H" -o "$WORK/bg.png" "$WORK/bg/0000.svg"
+  BG_INPUT=(-loop 1 -i "$WORK/bg.png")
+else
+  for f in "$WORK/bg"/*.svg; do
+    rsvg-convert -w "$W" -h "$H" -o "${f%.svg}.png" "$f"
+  done
+  BG_INPUT=(-stream_loop -1 -framerate "$BG_FPS" -i "$WORK/bg/%04d.png")
+fi
 
-  <rect x="$CX" y="$CY" width="$CARD_W" height="$BAR" fill="#161b22"/>
-  <rect x="$CX" y="$CY" width="$CARD_W" height="$BAR" rx="$RADIUS" fill="#161b22"/>
-  <rect x="$CX" y="$(( CY + BAR - RADIUS ))" width="$CARD_W" height="$RADIUS" fill="#161b22"/>
-  <circle cx="$(( CX + 22 ))" cy="$(( CY + BAR/2 ))" r="6" fill="#ff5f57"/>
-  <circle cx="$(( CX + 42 ))" cy="$(( CY + BAR/2 ))" r="6" fill="#febc2e"/>
-  <circle cx="$(( CX + 62 ))" cy="$(( CY + BAR/2 ))" r="6" fill="#28c840"/>
-  <text x="$(( CX + CARD_W/2 ))" y="$(( CY + BAR/2 + 5 ))" text-anchor="middle"
-        font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-        font-size="13" fill="#8b949e">$TITLE</text>
-  <rect x="$CX" y="$CY" width="$CARD_W" height="$CARD_H" rx="$RADIUS"
-        fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="1.5"/>
+# --- masks and chrome -------------------------------------------------------
+# A real rounded corner needs the VIDEO to carry alpha. Punching a square hole
+# in an overlay leaves square corners no matter how round the card beneath is —
+# which is exactly how the first version looked.
+cat > "$WORK/mask.svg" <<SVG
+<svg xmlns="http://www.w3.org/2000/svg" width="$VW" height="$VH">
+  <rect width="$VW" height="$VH" fill="#000"/>
+  <path d="M0,0 H$VW V$(( VH - RADIUS )) A$RADIUS,$RADIUS 0 0 1 $(( VW - RADIUS )),$VH
+           H$RADIUS A$RADIUS,$RADIUS 0 0 1 0,$(( VH - RADIUS )) Z" fill="#fff"/>
 </svg>
 SVG
+rsvg-convert -w "$VW" -h "$VH" -o "$WORK/mask.png" "$WORK/mask.svg"
 
-rsvg-convert -w "$W" -h "$H" -o "$WORK/frame.png" "$WORK/frame.svg" || { echo "frame render failed" >&2; exit 1; }
+cat > "$WORK/chrome.svg" <<SVG
+<svg xmlns="http://www.w3.org/2000/svg" width="$W" height="$H">
+  <defs>
+    <filter id="sh" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="18" stdDeviation="26" flood-color="#000" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+  <g filter="url(#sh)">
+    <rect x="$CX" y="$CY" width="$CARD_W" height="$CARD_H" rx="$RADIUS" fill="#0d1117"/>
+  </g>
+  <path d="M$CX,$(( CY + BAR )) V$(( CY + RADIUS )) A$RADIUS,$RADIUS 0 0 1 $(( CX + RADIUS )),$CY
+           H$(( CX + CARD_W - RADIUS )) A$RADIUS,$RADIUS 0 0 1 $(( CX + CARD_W )),$(( CY + RADIUS ))
+           V$(( CY + BAR )) Z" fill="#161b22"/>
+  <circle cx="$(( CX + 24 ))" cy="$(( CY + BAR/2 ))" r="6" fill="#ff5f57"/>
+  <circle cx="$(( CX + 44 ))" cy="$(( CY + BAR/2 ))" r="6" fill="#febc2e"/>
+  <circle cx="$(( CX + 64 ))" cy="$(( CY + BAR/2 ))" r="6" fill="#28c840"/>
+  <text x="$(( CX + CARD_W/2 ))" y="$(( CY + BAR/2 + 5 ))" text-anchor="middle"
+        font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+        font-size="13.5" fill="#9aa4b2">$TITLE</text>
+  <rect x="$CX" y="$CY" width="$CARD_W" height="$CARD_H" rx="$RADIUS"
+        fill="none" stroke="#ffffff" stroke-opacity="0.13" stroke-width="1.25"/>
+</svg>
+SVG
+rsvg-convert -w "$W" -h "$H" -o "$WORK/chrome.png" "$WORK/chrome.svg"
 
-ffmpeg -y -f lavfi -i "color=c=0x0b1020:s=${W}x${H}" -i "$IN" -i "$WORK/frame.png" \
-  -filter_complex "[1:v]scale=${VW}:${VH}:flags=lanczos[v];[0:v][v]overlay=${VX}:${VY}:shortest=1[b];[b][2:v]overlay=0:0" \
+# --- composite --------------------------------------------------------------
+# Order: animated mesh, then the card+shadow+bar, then the video with rounded
+# alpha on top. Drawing the card first means its shadow falls on the mesh, and
+# the video lands inside it rather than over its border.
+ffmpeg -y "${BG_INPUT[@]}" -i "$IN" -i "$WORK/chrome.png" -i "$WORK/mask.png" \
+  -filter_complex "\
+    [1:v]scale=${VW}:${VH}:flags=lanczos,format=rgba[v]; \
+    [3:v]format=gray,scale=${VW}:${VH}[m]; \
+    [v][m]alphamerge[va]; \
+    [0:v]scale=${W}:${H},format=rgba[bg]; \
+    [bg][2:v]overlay=0:0[card]; \
+    [card][va]overlay=${VX}:${VY}:shortest=1,format=yuv420p" \
+  -t "${DUR:-30}" -r 30 \
   -c:v libx264 -pix_fmt yuv420p -profile:v high -level 4.0 \
-  -movflags +faststart -crf 20 "$OUT" >/dev/null 2>&1 || { echo "encode failed" >&2; exit 1; }
+  -movflags +faststart -crf 19 "$OUT" >/dev/null 2>&1 || { echo "encode failed" >&2; exit 1; }
 
 echo "$OUT"
