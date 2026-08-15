@@ -190,12 +190,20 @@ import sys; d=sys.stdin.buffer.read(); print(sum(d[:3])//3 if len(d)>=3 else 255
   # closer to 35 after the display transform, so limit=26 cropped nothing and
   # every scene kept its empty right-hand half.
   local crop
-  # Sample LATE. At two seconds a scene has often only printed its prompt, so
-  # cropdetect locked onto an empty pane and the finished clip was blank —
-  # which is what happened to the PDF and gallery scenes.
+  # Sample LATE: at two seconds a scene has often only printed its prompt, so
+  # any detector locks onto an empty pane and the clip comes out blank.
   local probe_at=$(( secs > 5 ? secs - 3 : 2 ))
-  crop="$(ffmpeg -ss "$probe_at" -i "$sdir/take.mov" -vf "cropdetect=limit=${TP_CROP_LIMIT:-52}:round=4:reset=0" \
-          -frames:v 30 -f null - 2>&1 | grep -o 'crop=[0-9:]*' | tail -1)"
+  local cw ch
+  cw="$(ffprobe -v error -select_streams v:0 -show_entries stream=width  -of csv=p=0 "$sdir/take.mov")"
+  ch="$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "$sdir/take.mov")"
+  ffmpeg -y -ss "$probe_at" -i "$sdir/take.mov" -frames:v 1 -f rawvideo -pix_fmt rgb24 \
+    "$sdir/probe.rgb" >/dev/null 2>&1
+  # Not cropdetect: it thresholds on absolute luma, and a diff's red and green
+  # line backgrounds sit at roughly the same luma as an empty pane. A limit
+  # high enough to remove the background ate the content, and the remainder was
+  # then scaled up to fill the card — which is what "zoomed in" looked like.
+  crop="$(python3 "$ROOT/tools/content-crop.py" "$sdir/probe.rgb" "$cw" "$ch" 2>/dev/null)"
+  rm -f "$sdir/probe.rgb"
   if [[ -n "$crop" ]]; then
     ffmpeg -y -i "$sdir/take.mov" -vf "${crop},pad=iw+44:ih+36:22:18:0x0d1117" \
       -c:v libx264 -pix_fmt yuv420p -crf 18 "$WORK/clips/$name.mp4" >/dev/null 2>&1

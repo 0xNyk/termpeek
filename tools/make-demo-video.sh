@@ -1,157 +1,175 @@
 #!/usr/bin/env bash
-# Build the demo video from real termpeek output.
-#
-# Frames are generated, not screen-recorded. Recording a terminal captures
-# whatever else is on screen and produces something nobody can regenerate; this
-# renders the actual bytes each command writes, so the video rebuilds from
-# source and contains nothing but the tool's own output.
+# Build the demo video from real termpeek output, scene by scene.
 #
 #   tools/make-demo-video.sh [outdir]
 #
-# Produces demo.mp4 (for X) and demo.gif (for the README).
+# Each scene is rendered at its own natural size and framed individually, so
+# nothing is scaled up to fill a shape it does not fit. The screen-capture
+# recorder has to guess where content ends; here the size is known, so there is
+# no crop step and nothing can be clipped — which is what made an earlier cut
+# look zoomed in.
+#
+# Frames are generated, not screen-recorded: recording a terminal captures
+# whatever else is on screen, and produces a bitmap nobody can regenerate.
 
 set -uo pipefail
 
 ROOT="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="${1:-$ROOT/assets/video}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/tp-video.XXXXXX")"
+trap 'rm -rf "$WORK"' EXIT
+
 A2S="$ROOT/tools/ansi2svg.py"
 TP="$ROOT/scripts/termpeek"
-
+FIX="$ROOT/tests/fixtures"
 FPS=30
-W=1280
-H=720
 
-mkdir -p "$OUT" "$WORK/frames"
-n=0
-
-# Append the same still for a number of seconds. Cheap: ffmpeg is asked for a
-# frame count at the end rather than being run per frame.
-hold() {
-  local png="$1" secs="$2"
-  local count; count=$(python3 -c "print(int($FPS*$secs))")
-  local i
-  for ((i=0; i<count; i++)); do
-    printf -v name '%06d' "$n"
-    cp "$png" "$WORK/frames/$name.png"
-    n=$((n+1))
-  done
-}
-
-# Render an ANSI capture to a PNG at video size, letterboxed on the dark ground
-# so every frame is exactly WxH and ffmpeg never has to rescale mid-stream.
-to_frame() {
-  local svg="$1" out="$2"
-  rsvg-convert -w $((W-120)) -o "$WORK/tmp.png" "$svg" 2>/dev/null || return 1
-  # Bound BOTH dimensions. Scaling on width alone makes a portrait source (a PDF
-  # page, say) taller than the frame, and pad cannot shrink — it fails with
-  # "padded dimensions cannot be smaller than input dimensions" and the scene
-  # silently drops out of the video.
-  ffmpeg -y -i "$WORK/tmp.png" -vf \
-    "scale=w=$((W-120)):h=$((H-80)):force_original_aspect_ratio=decrease,pad=$W:$H:(ow-iw)/2:(oh-ih)/2:0x0d1117" \
-    -frames:v 1 "$out" >/dev/null 2>&1
-}
-
-# The README demo assets already carry terminal chrome — a title bar and a
-# prompt line. Wrapping them again produced two of each. Scale and letterbox
-# them as they are.
-raw_frame() {
-  local png="$1" out="$2"
-  ffmpeg -y -i "$png" -vf \
-    "scale=w=$((W-120)):h=$((H-80)):force_original_aspect_ratio=decrease,pad=$W:$H:(ow-iw)/2:(oh-ih)/2:0x0d1117" \
-    -frames:v 1 "$out" >/dev/null 2>&1
-}
-
-# A typing effect: reveal the command one character at a time. This is the part
-# that makes a terminal clip readable — a command that appears instantly gives
-# the viewer nothing to follow.
-type_line() {
-  local text="$1" secs="${2:-1.2}"
-  local len=${#text}
-  local per; per=$(python3 -c "print(max(1,int($FPS*$secs/max(1,$len))))")
-  local i j
-  for ((i=1; i<=len; i++)); do
-    local shown="${text:0:i}"
-    printf '\033[2m$\033[0m %s\033[7m \033[0m\n' "$shown" \
-      | python3 "$A2S" --bare --min-cols 74 -o "$WORK/type.svg" >/dev/null
-    to_frame "$WORK/type.svg" "$WORK/type.png" || return 1
-    for ((j=0; j<per; j++)); do
-      printf -v name '%06d' "$n"; cp "$WORK/type.png" "$WORK/frames/$name.png"; n=$((n+1))
-    done
-  done
-}
-
+command -v rsvg-convert >/dev/null 2>&1 || { echo "rsvg-convert required" >&2; exit 127; }
+mkdir -p "$OUT" "$WORK/clips"
 say() { printf '\033[36m%s\033[0m\n' "$1" >&2; }
 
-# --- scenes -----------------------------------------------------------------
-FIX="$ROOT/tests/fixtures"
+# A still held for N seconds, at its own size. Dimensions are forced even for
+# x264; nothing is stretched.
+still_clip() {
+  local png="$1" secs="$2" out="$3"
+  ffmpeg -y -loop 1 -i "$png" -t "$secs" -r "$FPS" \
+    -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" \
+    -c:v libx264 -pix_fmt yuv420p -crf 18 "$out" >/dev/null 2>&1
+}
+
+# ANSI text -> PNG at natural size, rendered at 2x for crisp type.
+ansi_png() {
+  local out="$1" cols="$2"
+  python3 "$A2S" --bare --min-cols "$cols" -o "$WORK/t.svg" >/dev/null || return 1
+  rsvg-convert -z 2 -o "$out" "$WORK/t.svg"
+}
+
+# Stack a prompt line above an image, both padded onto the terminal background.
+# vstack requires both inputs to be the SAME width, and pad can only grow. So
+# pad BOTH to whichever is wider — padding only the body fails whenever the
+# prompt line happens to be longer, which silently dropped a whole scene.
+stack() {
+  local head="$1" body="$2" out="$3"
+  local hw bw w
+  hw="$(ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "$head")"
+  bw="$(ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "$body")"
+  [[ -n "$hw" && -n "$bw" ]] || return 1
+  w=$(( hw > bw ? hw : bw ))
+  ffmpeg -y -i "$head" -i "$body" -filter_complex \
+    "[0:v]pad=${w}:ih+26:0:8:0x0d1117[h];[1:v]pad=${w}:ih:0:0:0x0d1117[b];[h][b]vstack=inputs=2,pad=iw+52:ih+44:26:22:0x0d1117" \
+    -frames:v 1 "$out" >/dev/null 2>&1
+}
+
+# --- content ----------------------------------------------------------------
 [[ -s "$FIX/test.png" ]] || "$ROOT/tests/run.sh" >/dev/null 2>&1
 
-# A two-line fixture diff reads as a toy. Build a real one from the repo's own
-# history so the scene shows what a working diff actually looks like.
-git -C "$ROOT" diff "HEAD~1" -- lib/ > "$WORK/code.diff" 2>/dev/null
-[[ -s "$WORK/code.diff" ]] || cp "$FIX/test.diff" "$WORK/code.diff"
+mkdir -p "$WORK/before" "$WORK/after" "$WORK/cards"
+cat > "$WORK/before/auth.ts" <<'BEFORE'
+export async function authenticate(token: string) {
+  const payload = verify(token);
+  if (!payload) {
+    return null;
+  }
+  return { userId: payload.sub, scopes: [] };
+}
+BEFORE
+cat > "$WORK/after/auth.ts" <<'AFTER'
+export async function authenticate(token: string): Promise<Session | null> {
+  const payload = verify(token);
+  if (!payload || payload.exp * 1000 < Date.now()) {
+    return null;
+  }
+  const scopes = await getRoles(payload.sub);
+  return { userId: payload.sub, scopes, expiresAt: payload.exp * 1000 };
+}
+AFTER
+( cd "$WORK" && diff -u before/auth.ts after/auth.ts ) > "$WORK/change.diff" 2>/dev/null
 
-say "scene 1: the problem"
+i=1
+while IFS='|' read -r text likes replies reposts; do
+  cat > "$WORK/cards/c$i.json" <<CARD
+{"name":"Nyk","handle":"nykdotdev","verified":true,"avatar":"","text":"$text",
+ "created":"2026-08-1${i}T09:41:00.000Z","likes":$likes,"replies":$replies,"reposts":$reposts,"media":[]}
+CARD
+  "$ROOT/scripts/tweet-card" --from-json "$WORK/cards/c$i.json" --width 700 \
+    --out "$WORK/cards/p$i.svg" >/dev/null 2>&1
+  rsvg-convert -w 700 -o "$WORK/cards/p$i.png" "$WORK/cards/p$i.svg" 2>/dev/null
+  i=$((i+1))
+done <<'ROWS'
+termpeek v0.2 - preview images, video, PDFs and diffs from inside Claude Code.|128|9|21
+The terminal always supported graphics. The agent TUI was the thing in the way.|246|17|38
+Added X post previews - paste a link, see the card. No API key required.|181|12|29
+ROWS
+
+# --- scenes -----------------------------------------------------------------
+say "composing scenes"
+
 {
-  printf '\033[2m$\033[0m claude\n\n'
-  printf '\033[38;5;114m>\033[0m chart the p95 latency by region\n\n'
+  printf '\033[38;5;114m>\033[0m chart p95 latency by region\n\n'
   printf '  Wrote \033[1mout/latency.svg\033[0m\n\n'
-  printf '\033[31m  Read image (42 KB)\033[0m\n\n'
-  printf '\033[2m  ...the agent can see it. you cannot.\033[0m\n'
-} | python3 "$A2S" --bare --min-cols 74 -o "$WORK/s1.svg" >/dev/null
-to_frame "$WORK/s1.svg" "$WORK/s1.png" && hold "$WORK/s1.png" 3.2
+  printf '\033[31m  Read image (42 KB)\033[0m\n'
+  printf '\033[2m  the agent can see it. you cannot.\033[0m\n'
+} | ansi_png "$WORK/s1.png" 58
+still_clip "$WORK/s1.png" 3.4 "$WORK/clips/1-problem.mp4"
 
-say "scene 2: typing the fix"
-type_line "termpeek out/latency.svg" 1.1
+printf '\033[2m$\033[0m termpeek out/latency.svg\n' | ansi_png "$WORK/h2.png" 58
+rsvg-convert -w 1000 -o "$WORK/chart.png" "$ROOT/assets/readme/protocol-frames.svg"
+stack "$WORK/h2.png" "$WORK/chart.png" "$WORK/s2.png" \
+  && still_clip "$WORK/s2.png" 3.6 "$WORK/clips/2-image.mp4"
 
-say "scene 3: the image, actually rendered"
-rsvg-convert -w $((W-160)) -o "$WORK/chart.png" "$ROOT/assets/readme/protocol-frames.svg" 2>/dev/null
-python3 "$A2S" --image "$WORK/chart.png" --title "termpeek" \
-  --prompt "termpeek out/latency.svg" -o "$WORK/s3.svg" >/dev/null
-to_frame "$WORK/s3.svg" "$WORK/s3.png" && hold "$WORK/s3.png" 3.0
+"$TP" --here -g 150x40 "$WORK/change.diff" 2>/dev/null | ansi_png "$WORK/s3.png" 92
+still_clip "$WORK/s3.png" 3.8 "$WORK/clips/3-diff.mp4"
 
-say "scene 4: a diff, side by side"
-"$TP" --here -g 150x34 "$WORK/code.diff" 2>/dev/null \
-  | python3 "$A2S" --bare --min-cols 92 -o "$WORK/s4.svg" >/dev/null
-to_frame "$WORK/s4.svg" "$WORK/s4.png" && hold "$WORK/s4.png" 2.6
+if [[ -s "$OUT/report.pdf" ]]; then
+  pdftoppm -r 150 -png -f 1 -l 1 -aa yes -aaVector yes "$OUT/report.pdf" "$WORK/pg" 2>/dev/null
+  src="$(find "$WORK" -maxdepth 1 -name 'pg-*.png' -print -quit)"
+  if [[ -n "$src" ]]; then
+    ( source "$ROOT/lib/render.sh"; tp__pdf_frame "$src" "$WORK/page.png" ) >/dev/null 2>&1 \
+      || cp "$src" "$WORK/page.png"
+    printf '\033[2m$\033[0m termpeek q3-report.pdf\n' | ansi_png "$WORK/h4.png" 44
+    stack "$WORK/h4.png" "$WORK/page.png" "$WORK/s4.png" \
+      && still_clip "$WORK/s4.png" 3.6 "$WORK/clips/4-pdf.mp4"
+  fi
+fi
 
-say "scene 5: a PDF as paper"
-raw_frame "$ROOT/assets/readme/demo-pdf.png" "$WORK/s5.png" \
-  || { echo "scene 5 failed to render" >&2; exit 1; }
-hold "$WORK/s5.png" 2.6
+if [[ -s "$WORK/cards/p3.png" ]]; then
+  printf '\033[2m$\033[0m termpeek --gallery posts/*.svg\n' | ansi_png "$WORK/h5.png" 58
+  ffmpeg -y -i "$WORK/cards/p1.png" -i "$WORK/cards/p2.png" -i "$WORK/cards/p3.png" \
+    -filter_complex "[0:v][1:v][2:v]hstack=inputs=3" -frames:v 1 "$WORK/row.png" >/dev/null 2>&1
+  stack "$WORK/h5.png" "$WORK/row.png" "$WORK/s5.png" \
+    && still_clip "$WORK/s5.png" 3.8 "$WORK/clips/5-posts.mp4"
+fi
 
-say "scene 6: X posts"
-raw_frame "$ROOT/assets/readme/demo-gallery.png" "$WORK/s6.png" && hold "$WORK/s6.png" 2.8
-
-say "scene 7: the sidebar"
-raw_frame "$ROOT/assets/readme/demo-sidebar.png" "$WORK/s7.png" && hold "$WORK/s7.png" 3.0
-
-say "scene 8: close"
 {
-  printf '\n'
-  printf '  \033[1mtermpeek\033[0m\n\n'
-  printf '  images · video · PDFs · diffs · X posts\n'
+  printf '\n  \033[1mtermpeek\033[0m\n\n'
+  printf '  images  video  PDFs  diffs  X posts\n'
   printf '  \033[2minside Claude Code, Codex, Hermes\033[0m\n\n'
   printf '  \033[36mgithub.com/0xNyk/termpeek\033[0m\n'
-} | python3 "$A2S" --bare --min-cols 74 -o "$WORK/s8.svg" >/dev/null
-to_frame "$WORK/s8.svg" "$WORK/s8.png" && hold "$WORK/s8.png" 3.0
+} | ansi_png "$WORK/s6.png" 50
+still_clip "$WORK/s6.png" 3.4 "$WORK/clips/6-close.mp4"
 
-# --- encode -----------------------------------------------------------------
-say "encoding $n frames"
+# --- frame and assemble -----------------------------------------------------
+shopt -s nullglob
+framed=()
+for c in "$WORK/clips"/*.mp4; do
+  base="$(basename "$c" .mp4)"
+  if "$ROOT/tools/frame-video.sh" "$c" "$WORK/${base}.f.mp4" >/dev/null 2>&1; then
+    framed+=("$WORK/${base}.f.mp4")
+    say "  $base"
+  fi
+done
+(( ${#framed[@]} )) || { echo "no scenes composed" >&2; exit 1; }
 
-# yuv420p and even dimensions, or X and most players refuse to decode it.
-ffmpeg -y -framerate $FPS -i "$WORK/frames/%06d.png" \
-  -c:v libx264 -pix_fmt yuv420p -profile:v high -level 4.0 \
-  -movflags +faststart -crf 20 "$OUT/demo.mp4" >/dev/null 2>&1 \
-  || { echo "encode failed" >&2; exit 1; }
+: > "$WORK/list.txt"
+for f in "${framed[@]}"; do printf "file '%s'\n" "$f" >> "$WORK/list.txt"; done
+ffmpeg -y -f concat -safe 0 -i "$WORK/list.txt" -c copy "$OUT/demo.mp4" >/dev/null 2>&1 \
+  || ffmpeg -y -f concat -safe 0 -i "$WORK/list.txt" -c:v libx264 -pix_fmt yuv420p -crf 19 "$OUT/demo.mp4" >/dev/null 2>&1 \
+  || { echo "concat failed" >&2; exit 1; }
 
-# A palette pass, otherwise the gif dithers the terminal background into mush.
-ffmpeg -y -i "$OUT/demo.mp4" -vf "fps=15,scale=900:-1:flags=lanczos,palettegen=stats_mode=diff" \
-  "$WORK/pal.png" >/dev/null 2>&1
+ffmpeg -y -i "$OUT/demo.mp4" -vf "fps=12,scale=760:-1:flags=lanczos,palettegen=stats_mode=diff" "$WORK/pal.png" >/dev/null 2>&1
 ffmpeg -y -i "$OUT/demo.mp4" -i "$WORK/pal.png" \
-  -lavfi "fps=15,scale=900:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=3" \
+  -lavfi "fps=12,scale=760:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=4" \
   "$OUT/demo.gif" >/dev/null 2>&1
 
-rm -rf "$WORK"
-ls -la "$OUT"
+ffprobe -v error -show_entries format=duration -of csv=p=0 "$OUT/demo.mp4" | xargs printf "demo.mp4  %ss\n"
+du -h "$OUT/demo.mp4" "$OUT/demo.gif" 2>/dev/null | awk '{printf "  %s  %s\n", $1, $2}'
