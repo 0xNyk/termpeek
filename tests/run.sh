@@ -192,6 +192,17 @@ cachedir="$(mktemp -d "${TMPDIR:-/tmp}/tp-cache.XXXXXX")"
 tp_cache_saved="${TERMPEEK_CACHE:-}"
 export TERMPEEK_CACHE="$cachedir"
 # A file's key must change when the file does, or an edit serves a stale render.
+# GNU stat's -f means --file-system, so a BSD-first probe silently returns a
+# mount point on Linux instead of failing. That made every file share the same
+# metadata there, and edits stopped invalidating the cache. Assert the shape.
+case "$(tp__stat_mtime "$FIX/test.png")" in
+  ''|*[!0-9]*) no "stat mtime is not a plain number on this platform" ;;
+  *)           ok "stat mtime is numeric" ;;
+esac
+[[ "$(tp__stat_meta "$ROOT/lib/cache.sh")" != "$(tp__stat_meta "$ROOT/lib/render.sh")" ]] \
+  && ok "stat metadata differs between files" \
+  || no "two different files reported identical metadata"
+
 k1="$(tp_cache_key_file "$FIX/test.png" pdf 1)"
 k2="$(tp_cache_key_file "$FIX/test.png" pdf 2)"
 [[ "$k1" != "$k2" ]] && ok "different args give different keys" || no "keys collided across args"

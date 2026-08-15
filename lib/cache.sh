@@ -38,12 +38,28 @@ tp__hash() {
   fi
 }
 
+# GNU stat must be tried FIRST. Its `-f` means --file-system, so `stat -f '%m'`
+# succeeds on Linux and returns a mount point rather than failing — a BSD-first
+# fallback therefore never fires there. That silently made every file share the
+# same metadata, so edits stopped invalidating the cache on Linux while working
+# correctly on macOS. Ordering matters: BSD has no `-c`, so it fails cleanly.
+tp__stat_meta() {
+  stat -c '%s-%Y' "$1" 2>/dev/null || stat -f '%z-%m' "$1" 2>/dev/null
+}
+
+tp__stat_mtime() {
+  stat -c '%Y' "$1" 2>/dev/null || stat -f '%m' "$1" 2>/dev/null
+}
+
 # Identity of a local file: path, size and mtime. Any edit changes the key, so
 # a cached render can never outlive the file it came from.
 tp_cache_key_file() {
   local f="$1"; shift
-  local meta
-  meta="$(stat -f '%z-%m' "$f" 2>/dev/null || stat -c '%s-%Y' "$f" 2>/dev/null)"
+  local meta; meta="$(tp__stat_meta "$f")"
+  # Without usable metadata the key would depend on the path alone, which would
+  # serve a stale render after an edit. Fall back to something unique instead,
+  # so the entry simply never hits.
+  [[ -n "$meta" ]] || meta="nometa-$RANDOM"
   printf '%s|%s|%s' "$f" "$meta" "$*" | tp__hash
 }
 
@@ -66,9 +82,11 @@ tp_cache_get() {
 
   if (( ttl > 0 )); then
     local mtime now
-    mtime="$(stat -f '%m' "$path" 2>/dev/null || stat -c '%Y' "$path" 2>/dev/null)"
+    mtime="$(tp__stat_mtime "$path")"
     now="$(date +%s)"
-    if [[ -n "$mtime" ]] && (( now - mtime > ttl )); then
+    # No readable mtime means the age is unknown; treat that as expired rather
+    # than serving something that might be arbitrarily old.
+    if [[ -z "$mtime" ]] || (( now - mtime > ttl )); then
       return 1
     fi
   fi
@@ -104,8 +122,10 @@ tp_cache_prune() {
   (( n > TERMPEEK_CACHE_MAX )) || return 0
   local excess=$(( n - TERMPEEK_CACHE_MAX ))
   # Sort by mtime; BSD and GNU stat disagree on flags, so ask find for the time.
-  find "$dir" -type f ! -name '.*' -exec stat -f '%m %N' {} + 2>/dev/null \
-    || find "$dir" -type f ! -name '.*' -exec stat -c '%Y %n' {} + 2>/dev/null \
+  # Same GNU-first ordering as above, and the pipeline is applied to whichever
+  # form produced output rather than only to the second.
+  { find "$dir" -type f ! -name '.*' -exec stat -c '%Y %n' {} + 2>/dev/null \
+    || find "$dir" -type f ! -name '.*' -exec stat -f '%m %N' {} + 2>/dev/null; } \
     | sort -n | head -n "$excess" | cut -d' ' -f2- | while IFS= read -r victim; do
         [[ -n "$victim" ]] && rm -f "$victim" 2>/dev/null
       done
