@@ -35,6 +35,37 @@ your change affects appearance, say what you looked at and in which terminal.
 Adding a regression test for a bug you fixed is the most useful thing you can
 do here. Every check in the suite exists because something broke.
 
+## Assets and demos are generated, never screenshotted
+
+Every image in the README is built from real command output by a committed
+script — `tools/ansi2svg.py` for terminal output, `tools/make-banner.sh` for the
+banner, `tools/make-demo-video.sh` for the clip, `tools/make-demo-assets.sh` for
+the demo project's media. The tmux sidebar shot is a genuine `tmux capture-pane`.
+
+```bash
+./scripts/termpeek --here --diff | tools/ansi2svg.py --title "termpeek --diff" -o out.svg
+```
+
+Two reasons, and the second is the serious one:
+
+1. A screenshot is a bitmap nobody can diff or regenerate. When behaviour
+   changes, generated assets rebuild; screenshots quietly go stale and start
+   advertising something the tool no longer does.
+2. Capturing a terminal captures whatever else is on screen. That is not
+   hypothetical — it happened while building this README, and the capture held
+   unrelated work that had no business being published.
+
+If you add an image, add the script that produces it.
+
+## Documentation
+
+Behaviour changes need the docs changed in the same PR. This project has
+already shipped a README that stated the inverse of what the code did — it said
+images could not render in a tmux pane, months after they could. Documentation
+that is confidently wrong is worse than none.
+
+Deep material lives in `docs/`; keep the README scannable and link out.
+
 ## Pull requests
 
 - One concern per PR
