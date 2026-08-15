@@ -61,6 +61,21 @@ check "iTerm -> iterm"   "$(TERM_PROGRAM=iTerm.app TERM=xterm-256color TMUX='' t
 check "dumb -> symbols"  "$(TERM_PROGRAM='' TERM=dumb TMUX='' tp_detect_protocol)" "symbols"
 check "unknown -> symbols" "$(TERM_PROGRAM='' TERM=weird-term-9000 TMUX='' tp_detect_protocol)" "symbols"
 
+echo "== transports =="
+check "explicit transport wins" "$(TERMPEEK_TRANSPORT=tmux tp_detect_transport)" "tmux"
+# Linux without a display has nowhere to put a window; claiming otherwise
+# spawns a process that dies without ever showing anything.
+if [[ -n "$(tp_linux_terminal)" ]]; then
+  ok "finds a terminal emulator to spawn"
+else
+  echo "  no terminal emulator on PATH; skipping"
+fi
+# shellcheck disable=SC2209  # env-var prefix on a function call, not an assignment
+check "\$TERMINAL wins when installed" "$(TERMINAL=cat tp_linux_terminal)" "cat"
+check "\$TERMINAL args stripped"       "$(TERMINAL='cat -v' tp_linux_terminal)" "cat"
+check "uninstalled \$TERMINAL ignored" \
+  "$(TERMINAL=definitely-not-a-terminal tp_linux_terminal >/dev/null 2>&1; echo $?)" "0"
+
 echo "== renderer output shape =="
 if command -v chafa >/dev/null 2>&1 && [[ -f "$FIX/test.png" ]]; then
   out="$(TP_GEOMETRY=20x10 tp_render_image "$FIX/test.png" kitty 2>/dev/null | head -c 4000)"
@@ -161,6 +176,40 @@ if command -v chafa >/dev/null 2>&1 && [[ -s "$FIX/test.png" ]]; then
       && ok "paths with spaces survive" || no "path with space broke the gallery"
   else
     echo "  timg missing; skipping gallery tiling checks"
+  fi
+fi
+
+echo "== auto-preview hook =="
+HOOK="$ROOT/hooks/claude-code/auto-preview.sh"
+if [[ -x "$HOOK" ]] && command -v jq >/dev/null 2>&1; then
+  hookrun() { printf '%s' "$1" | TERMPEEK_BIN="$hookstub" TERMPEEK_CACHE="$hookcache" "$HOOK" >/dev/null 2>&1; echo $?; }
+  hookdir="$(mktemp -d "${TMPDIR:-/tmp}/tp-hook.XXXXXX")"
+  hookstub="$hookdir/stub.sh"; hookcache="$hookdir/cache"; hooklog="$hookdir/log"
+  printf '#!/bin/sh\necho x >> "%s"\n' "$hooklog" > "$hookstub"; chmod +x "$hookstub"
+  : > "$hooklog"
+
+  # Every guard must exit 0: a hook that fails is a hook that blocks the agent.
+  check "hook ignores non-media"  "$(hookrun "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$ROOT/lib/probe.sh\"}}")" "0"
+  check "hook ignores other tools" "$(hookrun '{"tool_name":"Bash","tool_input":{"command":"ls"}}')" "0"
+  check "hook ignores absent file" "$(hookrun '{"tool_name":"Write","tool_input":{"file_path":"/no/such/x.png"}}')" "0"
+  check "hook survives junk input" "$(hookrun 'not json')" "0"
+  check "hook exits 0 on opt-out"  "$(printf '%s' '{"tool_name":"Write","tool_input":{"file_path":"'"$FIX"'/test.png"}}' | TERMPEEK_AUTO_PREVIEW=0 "$HOOK" >/dev/null 2>&1; echo $?)" "0"
+
+  if [[ -s "$FIX/test.png" ]]; then
+    n0=$(wc -l < "$hooklog" | tr -d ' ')
+    hookrun "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$FIX/test.png\"}}" >/dev/null
+    sleep 1
+    n1=$(wc -l < "$hooklog" | tr -d ' ')
+    # Only meaningful where something can actually display; skip otherwise.
+    if [[ "$(tp_detect_transport)" != "none" ]]; then
+      (( n1 > n0 )) && ok "hook previews a written image" || no "hook did not fire on an image"
+      hookrun "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$FIX/test.png\"}}" >/dev/null
+      sleep 1
+      n2=$(wc -l < "$hooklog" | tr -d ' ')
+      (( n2 == n1 )) && ok "hook cooldown suppresses repeats" || no "hook fired twice for one file"
+    else
+      echo "  no transport; skipping hook firing checks"
+    fi
   fi
 fi
 

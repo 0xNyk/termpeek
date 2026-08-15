@@ -128,6 +128,15 @@ tp_transport_tmux() {
 tp_transport_window() {
   local target="$1"
   local runner; runner="$(tp__make_runner "$target" 1)"
+
+  case "$(uname -s)" in
+    Darwin) tp__window_macos "$runner" ;;
+    *)      tp__window_linux "$runner" ;;
+  esac
+}
+
+tp__window_macos() {
+  local runner="$1"
   local app="${TERMPEEK_WINDOW_APP:-}"
 
   if [[ -z "$app" ]]; then
@@ -143,6 +152,29 @@ tp_transport_window() {
   else
     open -na Terminal.app "$runner"
   fi
+}
+
+# Terminal emulators disagree about how to be handed a command, and getting it
+# wrong usually opens an empty window rather than failing loudly. Each form
+# below is the documented one for that emulator.
+tp__window_linux() {
+  local runner="$1"
+  local term="${TERMPEEK_WINDOW_APP:-$(tp_linux_terminal)}"
+
+  if [[ -z "$term" ]]; then
+    echo "termpeek: no terminal emulator found; set TERMPEEK_WINDOW_APP or use tmux" >&2
+    return 69
+  fi
+
+  case "$(basename "$term")" in
+    wezterm)                  nohup "$term" start -- "$runner" >/dev/null 2>&1 & ;;
+    kitty|foot|ghostty)       nohup "$term" "$runner"          >/dev/null 2>&1 & ;;
+    gnome-terminal|xfce4-terminal)
+                              nohup "$term" -- "$runner"       >/dev/null 2>&1 & ;;
+    # konsole, alacritty, xterm and the Debian alternative all take -e.
+    *)                        nohup "$term" -e "$runner"       >/dev/null 2>&1 & ;;
+  esac
+  disown 2>/dev/null || true
 }
 
 tp_transport_inline() {

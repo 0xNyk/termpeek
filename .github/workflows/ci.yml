@@ -13,14 +13,14 @@ jobs:
       - name: shellcheck
         run: |
           sudo apt-get update -qq && sudo apt-get install -y shellcheck
-          shellcheck -S warning -e SC1091 lib/*.sh scripts/termpeek scripts/tp-session install.sh tests/run.sh
+          shellcheck -S warning -e SC1091 lib/*.sh scripts/* install.sh tests/run.sh hooks/claude-code/*.sh
 
   test-linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: install renderers
-        run: sudo apt-get update -qq && sudo apt-get install -y chafa ffmpeg bat poppler-utils
+        run: sudo apt-get update -qq && sudo apt-get install -y chafa ffmpeg bat poppler-utils jq
       - name: run tests
         run: ./tests/run.sh
 

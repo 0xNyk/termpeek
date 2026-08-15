@@ -14,6 +14,15 @@ All notable changes to termpeek are recorded here. Format follows
   X API v2 via `xint`, and cookie auth for posts the others cannot reach. Pin
   one with `TERMPEEK_X_BACKEND`; all three normalize to a single record shape so
   the renderer only knows one schema.
+- A Linux window transport. Previously `tp_detect_transport` returned `window`
+  only on macOS, so a Linux user without tmux got `none` and termpeek could not
+  work at all — while the README claimed Linux support. It now spawns
+  `$TERMINAL` or the first installed emulator, each invoked the way that
+  emulator documents, and reports `none` when there is no display rather than
+  spawning something nobody will see.
+- A Claude Code `PostToolUse` hook that previews images, PDFs and video as the
+  agent writes them. Never blocks (every path exits 0, preview runs detached),
+  skips code and diffs, and suppresses repeats of the same file.
 - `--gallery` and `--carousel` for previewing several items together. Passing
   more than one target implies a gallery. Mixed types work: images, PDF pages,
   video stills and X posts reduce to a common still form first.

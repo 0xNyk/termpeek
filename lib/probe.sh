@@ -109,9 +109,37 @@ tp_detect_transport() {
 
   case "$(uname -s)" in
     Darwin) printf 'window'; return 0 ;;
+    Linux)
+      # Only if there is a display to put a window on. Over plain SSH or in a
+      # container there is not, and claiming otherwise means spawning a process
+      # that dies without ever showing anything.
+      if [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]] && [[ -n "$(tp_linux_terminal)" ]]; then
+        printf 'window'; return 0
+      fi
+      ;;
   esac
 
   printf 'none'
+}
+
+# First usable terminal emulator on Linux, respecting $TERMINAL if the user set
+# it. Ordered so terminals that can actually draw pixels come first — falling
+# back to xterm means block art, which works but is a downgrade.
+tp_linux_terminal() {
+  if [[ -n "${TERMINAL:-}" ]] && command -v "${TERMINAL%% *}" >/dev/null 2>&1; then
+    printf '%s' "${TERMINAL%% *}"
+    return 0
+  fi
+  local t
+  for t in kitty wezterm ghostty foot konsole alacritty gnome-terminal \
+           xfce4-terminal x-terminal-emulator xterm; do
+    if command -v "$t" >/dev/null 2>&1; then
+      printf '%s' "$t"
+      return 0
+    fi
+  done
+  printf ''
+  return 1
 }
 
 tp_probe_report() {

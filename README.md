@@ -202,6 +202,12 @@ This is the default when you're not in tmux.
 
 **inline** — straight to stdout, for running termpeek by hand.
 
+On Linux the window transport spawns your terminal emulator — `$TERMINAL` if you
+set one, otherwise the first of kitty, wezterm, ghostty, foot, konsole,
+alacritty, gnome-terminal, xterm that is installed. With no display server
+attached there is nowhere to put a window, so the transport reports `none`
+rather than spawning something you will never see; use tmux there.
+
 To make the sidebar the default, launch your agent through the wrapper:
 
 ```bash
@@ -212,6 +218,23 @@ tp-session codex      # or any other agent CLI
 It records your terminal's graphics protocol before tmux rewrites `TERM`, and
 enables `allow-passthrough` — without which tmux eats the escape sequences that
 carry Kitty graphics.
+
+## Previews that open by themselves
+
+A `PostToolUse` hook previews media the moment the agent writes it, so you stop
+having to ask.
+
+```json
+{ "hooks": { "PostToolUse": [ { "matcher": "Write|Edit|NotebookEdit",
+  "hooks": [ { "type": "command",
+    "command": "/path/to/termpeek/hooks/claude-code/auto-preview.sh" } ] } ] } }
+```
+
+Images, PDFs and video only — code and diffs are skipped, because the agent
+already shows you those and a window per edit would be intolerable. Repeats of
+the same file are suppressed for 20 seconds, so a render loop opens one preview
+rather than forty. Set `TERMPEEK_AUTO_PREVIEW=0` to turn it off without editing
+settings. Full notes in [hooks/claude-code/README.md](hooks/claude-code/README.md).
 
 ## Two traps worth knowing
 
@@ -278,7 +301,9 @@ pass through, and the block-art fallback always works.
 
 ## Requirements
 
-macOS or Linux. `bash` 3.2 is enough (macOS ships it). `ffmpeg` is used for PDF
+macOS or Linux. On Linux you need either tmux or a terminal emulator and a
+display; headless hosts get the inline path only. `bash` 3.2 is enough (macOS
+ships it). `ffmpeg` is used for PDF
 page framing. Everything else degrades: with no graphics protocol you get
 Unicode block art, which works in any terminal.
 
