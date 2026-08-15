@@ -14,6 +14,11 @@ All notable changes to termpeek are recorded here. Format follows
   X API v2 via `xint`, and cookie auth for posts the others cannot reach. Pin
   one with `TERMPEEK_X_BACKEND`; all three normalize to a single record shape so
   the renderer only knows one schema.
+- `--gallery` and `--carousel` for previewing several items together. Passing
+  more than one target implies a gallery. Mixed types work: images, PDF pages,
+  video stills and X posts reduce to a common still form first.
+- `tools/ansi2svg.py`, which renders real terminal output to SVG. The README
+  demos are generated from actual command output rather than screenshotted.
 - Diagrams in the README, generated from committed SVG via `rsvg-convert`.
 
 ### Notes
@@ -27,6 +32,11 @@ All notable changes to termpeek are recorded here. Format follows
   expose them; termpeek warns if the file is group- or world-readable.
 - Avatars are a circle filled from an SVG `<pattern>`, not an `<image>` with a
   `clip-path` — librsvg ignores the clip and renders a square.
+- Contact sheets label cells with `%b`. timg has no page-number format
+  specifier — `%f %b %w %h %D` is the whole set — so an invented `%02n` printed
+  literally. Page numbers now live in the filename.
+- `--grid` is given explicit columns AND rows; `--grid=N` alone means an NxN
+  grid and reserves far more vertical space than a few pages need.
 
 ## [0.1.0] — 2026-08-15
 

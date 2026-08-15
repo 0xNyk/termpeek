@@ -138,6 +138,24 @@ if command -v jq >/dev/null 2>&1; then
   fi
 fi
 
+echo "== gallery / carousel =="
+if command -v chafa >/dev/null 2>&1 && [[ -s "$FIX/test.png" ]]; then
+  check "image resolves to itself" "$(tp_resolve_to_image "$FIX/test.png")" "$FIX/test.png"
+  check "text has no still preview" "$(tp_resolve_to_image "$FIX/test.diff" 2>/dev/null)" ""
+  # Several targets with no explicit mode should still show them together.
+  "$TP" --here -g 60x16 "$FIX/test.png" "$FIX/test.png" >/dev/null 2>&1 \
+    && ok "two targets render together" || no "two targets failed"
+  "$TP" --here --gallery -g 60x16 "$FIX/test.png" >/dev/null 2>&1 \
+    && ok "--gallery works with one item" || no "--gallery with one item failed"
+  "$TP" --here --carousel --wait 1 -g 40x12 "$FIX/test.png" "$FIX/test.png" >/dev/null 2>&1 \
+    && ok "--carousel cycles items" || no "--carousel failed"
+  check "--cols needs a value" "$("$TP" --here --gallery --cols >/dev/null 2>&1; echo $?)" "64"
+  # A path with a space must survive the trip through the transport's item list.
+  cp "$FIX/test.png" "$FIX/with space.png"
+  "$TP" --here --gallery -g 60x16 "$FIX/with space.png" "$FIX/test.png" >/dev/null 2>&1 \
+    && ok "paths with spaces survive" || no "path with space broke the gallery"
+fi
+
 echo "== cli =="
 check "no args -> 64"        "$("$TP" >/dev/null 2>&1; echo $?)" "64"
 check "missing value -> 64"  "$("$TP" --here -g >/dev/null 2>&1; echo $?)" "64"

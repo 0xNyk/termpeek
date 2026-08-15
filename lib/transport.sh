@@ -43,9 +43,16 @@ export TERMPEEK_LOOPS="${TERMPEEK_LOOPS:-1}"
 export TERMPEEK_PDF_PAGE="${TERMPEEK_PDF_PAGE:-1}"
 ${TERMPEEK_PDF_DPI:+export TERMPEEK_PDF_DPI="$TERMPEEK_PDF_DPI"}
 export TERMPEEK_RENDER_MODE="${TERMPEEK_RENDER_MODE:-auto}"
+export TERMPEEK_MULTI_FN="${TERMPEEK_MULTI_FN:-}"
+export TERMPEEK_MULTI_LIST="${TERMPEEK_MULTI_LIST:-}"
 source "$TERMPEEK_LIB/render.sh"
 printf '\033]0;termpeek: %s\007' "$(basename "$target")"
-if [[ "\$TERMPEEK_RENDER_MODE" == "sheet" ]]; then
+if [[ -n "\$TERMPEEK_MULTI_FN" && -s "\$TERMPEEK_MULTI_LIST" ]]; then
+  items=()
+  while IFS= read -r line; do [[ -n "\$line" ]] && items+=("\$line"); done < "\$TERMPEEK_MULTI_LIST"
+  rm -f "\$TERMPEEK_MULTI_LIST"
+  "\$TERMPEEK_MULTI_FN" "\${items[@]}"
+elif [[ "\$TERMPEEK_RENDER_MODE" == "sheet" ]]; then
   tp_render_pdf_sheet "$target"
 else
   tp_render "$target"

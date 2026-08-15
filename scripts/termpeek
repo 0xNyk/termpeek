@@ -25,7 +25,7 @@ tp_usage() {
   cat <<'EOF'
 termpeek — media preview for agent CLIs
 
-  termpeek <file|url>              preview a file, PDF, video, or tweet URL
+  termpeek <file|url> [more...]    preview one item, or several together
   termpeek --diff [<git args>]     preview the working-tree diff
   termpeek --probe                 print detected terminal capabilities
   termpeek --version
@@ -36,6 +36,10 @@ Options:
   -t, --transport <name> tmux | window | inline (default: detected)
       --page <n>         PDF page to show (default 1)
       --pages            PDF contact sheet: all pages as a thumbnail grid
+      --gallery          tile several items side by side
+      --carousel         cycle through several items, one at a time
+      --cols <n>         gallery columns (default: one row, max 4)
+      --wait <secs>      carousel delay per item (default 3)
       --dpi <n>          PDF render DPI (overrides exact-pixel sizing)
       --loops <n>        video loops (default 1, -1 = forever)
       --here             render to stdout instead of using a transport
@@ -48,6 +52,7 @@ EOF
 main() {
   local target="" mode="show" force_here=0
   local -a gitargs=()
+  local -a targets=()
 
   # Accept both `--opt value` and `--opt=value`. Splitting the `=` form up front
   # keeps the case arms below to one spelling each.
@@ -70,7 +75,7 @@ main() {
     # only reliable test: passing "${2-}" would hand the callee an empty string,
     # which is indistinguishable from a supplied empty value.
     case "$1" in
-      -g|--geometry|-p|--protocol|-t|--transport|--page|--dpi|--loops)
+      -g|--geometry|-p|--protocol|-t|--transport|--page|--dpi|--loops|--cols|--wait)
         if (( $# < 2 )) || [[ "$2" == -* ]]; then
           echo "termpeek: $1 requires a value" >&2
           return 64
@@ -89,11 +94,15 @@ main() {
       -t|--transport) export TERMPEEK_TRANSPORT="$2"; shift 2 ;;
       --page)         export TERMPEEK_PDF_PAGE="$2"; shift 2 ;;
       --pages)        mode="sheet"; shift ;;
+      --gallery)      mode="gallery"; shift ;;
+      --carousel)     mode="carousel"; shift ;;
+      --cols)         export TERMPEEK_COLS="$2"; shift 2 ;;
+      --wait)         export TERMPEEK_CAROUSEL_WAIT="$2"; shift 2 ;;
       --dpi)          export TERMPEEK_PDF_DPI="$2"; shift 2 ;;
       --loops)        export TERMPEEK_LOOPS="$2"; shift 2 ;;
       --)             shift; target="${1:-}"; break ;;
       -*)             echo "termpeek: unknown option: $1" >&2; tp_usage >&2; return 64 ;;
-      *)              target="$1"; shift ;;
+      *)              targets+=("$1"); target="$1"; shift ;;
     esac
   done
 
@@ -128,6 +137,24 @@ main() {
   if [[ -z "$target" ]]; then
     tp_usage >&2
     return 64
+  fi
+
+  # More than one target, or an explicit multi-item mode: show them together.
+  # A single item passed with --gallery still works and just renders one cell.
+  if [[ "$mode" == "gallery" || "$mode" == "carousel" ]] || (( ${#targets[@]} > 1 )); then
+    if (( ${#targets[@]} == 0 )); then tp_usage >&2; return 64; fi
+    local fn="tp_render_gallery"
+    [[ "$mode" == "carousel" ]] && fn="tp_render_carousel"
+    if (( force_here )); then
+      "$fn" "${targets[@]}"
+    else
+      # Hand the transport a newline-delimited list rather than a joined string,
+      # so paths containing spaces survive the trip into the runner script.
+      local list; list="$(mktemp "${TMPDIR:-/tmp}/termpeek-items.XXXXXX")" || return 1
+      printf '%s\n' "${targets[@]}" > "$list"
+      TERMPEEK_MULTI_FN="$fn" TERMPEEK_MULTI_LIST="$list" tp_show "${targets[0]}"
+    fi
+    return $?
   fi
 
   if [[ "$mode" == "sheet" ]]; then

@@ -62,6 +62,8 @@ termpeek --diff HEAD~3 -- src/           # any git diff arguments
 termpeek --pages docs/2026-q3-report.pdf # contact sheet of every page
 termpeek --page 4 docs/spec.pdf          # a specific page
 termpeek https://x.com/nykdotdev/status/20
+termpeek --gallery shot.png report.pdf   # several items at once
+termpeek --carousel --wait 4 img/*.png   # one at a time
 termpeek --probe                         # what your terminal actually supports
 ```
 
@@ -72,6 +74,10 @@ termpeek --probe                         # what your terminal actually supports
 | `-t, --transport` | `tmux` \| `window` \| `inline` | detected |
 | `--page <n>` | PDF page | `1` |
 | `--pages` | PDF contact sheet | off |
+| `--gallery` | tile several items together | off |
+| `--carousel` | cycle several items, one at a time | off |
+| `--cols <n>` | gallery columns | one row, max 4 |
+| `--wait <s>` | carousel delay per item | `3` |
 | `--dpi <n>` | PDF DPI (overrides exact-pixel sizing) | auto |
 | `--loops <n>` | video loops, `-1` for forever | `1` |
 | `--here` | write to stdout, skip the transport | off |
@@ -87,6 +93,61 @@ termpeek --probe                         # what your terminal actually supports
 | Code | bat | syntax highlighting and line numbers |
 | X posts | SVG → chafa | avatar, badge, text, counts — no API key needed |
 
+Every image below is generated from real command output by `tools/ansi2svg.py`,
+not drawn by hand — see [Demos are reproducible](#demos-are-reproducible).
+
+### Images
+
+![An SVG chart rendered inside the terminal at full pixel fidelity.](assets/readme/demo-image.png)
+
+### Video
+
+![A frame of an animated clip rendered in the terminal.](assets/readme/demo-video.png)
+
+Plays at full frame rate under Kitty graphics — 75 frames at 15.1fps on the clip
+above. A single frame is shown here because a README cannot move.
+
+### PDFs
+
+![A PDF page rendered as paper, with a white background, border and page counter.](assets/readme/demo-pdf.png)
+
+Rasterized at exactly the pixel size the terminal will draw, so the type stays
+legible instead of going through two lossy resizes.
+
+`--pages` gives the whole document at once:
+
+![Four PDF pages tiled as a contact sheet.](assets/readme/demo-pages.png)
+
+### Diffs
+
+![A side-by-side TypeScript diff with syntax highlighting and line numbers.](assets/readme/demo-diff.png)
+
+### Code
+
+![A TypeScript file with syntax highlighting and line numbers.](assets/readme/demo-code.png)
+
+### Several things at once
+
+Pass more than one target and they are shown together — mix types freely:
+
+```bash
+termpeek --gallery a.png report.pdf https://x.com/nykdotdev/status/20
+termpeek --carousel --wait 4 links/*.url     # one at a time
+```
+
+![Three X post cards tiled side by side in one terminal pane.](assets/readme/demo-gallery.png)
+
+### The sidebar
+
+![A tmux window with an agent conversation on the left and a termpeek diff preview on the right.](assets/readme/demo-sidebar.png)
+
+Captured from a real tmux session: the agent runs on the left, previews open on
+the right and reuse that one pane.
+
+### Capability probe
+
+![termpeek --probe output showing detected protocol, transport and terminal.](assets/readme/demo-probe.png)
+
 ## X posts
 
 Paste a link, see the post. No API key, no browser, no login.
@@ -95,11 +156,9 @@ Paste a link, see the post. No API key, no browser, no login.
 termpeek https://x.com/nykdotdev/status/20
 ```
 
-![An X post rendered as a card: avatar, name, verified badge, post text, timestamp and engagement counts.](assets/readme/tweet-card.png)
-
-*Example render.* The card is generated as SVG and handed straight to chafa,
-which rasterizes SVG natively — so this path adds no browser, no headless
-Chrome, and no JavaScript toolchain.
+The card is generated as SVG and handed straight to chafa, which rasterizes SVG
+natively — so this path adds no browser, no headless Chrome, and no JavaScript
+toolchain.
 
 Three ways to fetch, tried in order:
 
@@ -125,27 +184,6 @@ anyone but you.
 
 The syndication endpoint is undocumented and can change without notice. That is
 the trade for needing no setup; the other two backends exist for when it does.
-
-## What a session looks like
-
-You keep talking to the agent. Previews appear beside it and stay there.
-
-```console
-$ tp-session                       # claude, in tmux, sidebar ready
-
-  ┌ claude ──────────────────────────┐ ┌ termpeek ──────────┐
-  │ > chart p95 latency by region    │ │                    │
-  │                                  │ │   [ the chart,     │
-  │ Wrote out/latency-by-region.png  │ │     in pixels ]    │
-  │ ⏵ termpeek out/latency-by-…png   │ │                    │
-  │                                  │ │                    │
-  │ > ok, what did you change?       │ │   [ side-by-side   │
-  │ ⏵ termpeek --diff                │ │     diff of        │
-  │                                  │ │     metrics.ts ]   │
-  └──────────────────────────────────┘ └────────────────────┘
-```
-
-The sidebar is one pane, reused. Ten previews later the layout is unchanged.
 
 ## Transports
 
@@ -240,6 +278,20 @@ pass through, and the block-art fallback always works.
 macOS or Linux. `bash` 3.2 is enough (macOS ships it). `ffmpeg` is used for PDF
 page framing. Everything else degrades: with no graphics protocol you get
 Unicode block art, which works in any terminal.
+
+## Demos are reproducible
+
+Every demo above comes from real command output. `tools/ansi2svg.py` reads the
+bytes a command actually writes — SGR colour, bold, dim, inverse — and draws
+them as SVG. The tmux sidebar is a genuine `tmux capture-pane`.
+
+They are not screenshots, deliberately. Capturing a terminal captures whatever
+else is on screen, and produces a bitmap nobody can diff or regenerate. This way
+the demos rebuild from source and contain nothing but the command's own output.
+
+```bash
+./scripts/termpeek --here --diff | tools/ansi2svg.py --title "termpeek --diff" -o out.svg
+```
 
 ## Testing
 

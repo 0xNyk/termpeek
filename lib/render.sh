@@ -242,19 +242,27 @@ tp_render_pdf_sheet() {
   (( last > max )) && last=$max
 
   local tmp; tmp="$(mktemp -d "${TMPDIR:-/tmp}/termpeek-sheet.XXXXXX")" || return 1
+  # timg labels each cell with the file's basename — it has no page-number
+  # format specifier (%f %b %w %h %D are the whole set), so the page number has
+  # to be in the filename itself.
   pdftoppm -png -f 1 -l "$last" -aa yes -aaVector yes -scale-to-x 600 -scale-to-y -1 \
-    "$target" "$tmp/pg" 2>/dev/null
+    "$target" "$tmp/page" 2>/dev/null
 
   printf '\033[1m%s\033[0m  \033[2m·  PDF  ·  %s pages' "$(basename "$target")" "$pages"
   [[ "$pages" != "?" ]] && (( pages > last )) && printf ' (showing first %s)' "$last"
   printf '\033[0m\n'
 
   # shellcheck disable=SC2012
-  local -a files; while IFS= read -r f; do files+=("$f"); done < <(ls "$tmp"/pg*.png 2>/dev/null | sort)
+  local -a files; while IFS= read -r f; do files+=("$f"); done < <(ls "$tmp"/page*.png 2>/dev/null | sort)
   if (( ${#files[@]} == 0 )); then rm -rf "$tmp"; echo "termpeek: no pages rendered" >&2; return 1; fi
 
-  timg -p "$(tp__timg_pixelation "$proto")" --grid="$cols" -g "$TP_GEOMETRY" \
-    --title='page %02n' "${files[@]}"
+  # Give timg explicit columns AND rows. `--grid=N` alone means an NxN grid,
+  # which reserves far more vertical space than a handful of pages needs.
+  local rows=$(( (${#files[@]} + cols - 1) / cols ))
+  (( rows < 1 )) && rows=1
+
+  timg -p "$(tp__timg_pixelation "$proto")" --grid="${cols}x${rows}" -g "$TP_GEOMETRY" \
+    --title='%b' "${files[@]}"
   local rc=$?
   rm -rf "$tmp"
   return $rc
@@ -328,6 +336,98 @@ tp_render_tweet() {
   local card
   card="$("$TERMPEEK_LIB/../scripts/tweet-card" "$url")" || return $?
   tp_render_image "$card" "$proto"
+}
+
+# --- multiple items ---------------------------------------------------------
+# Reduce any previewable target to a single image file, so several unrelated
+# things — a screenshot, a PDF page, a post — can share one gallery or carousel.
+# Prints the path, or nothing if the type has no still representation.
+tp_resolve_to_image() {
+  local target="$1" out
+  local kind; kind="$(tp_detect_type "$target")"
+  local dir="${TERMPEEK_ITEM_DIR:-${TMPDIR:-/tmp}}"
+
+  case "$kind" in
+    image) printf '%s' "$target"; return 0 ;;
+    pdf)
+      out="$(mktemp "$dir/tp-item.XXXXXX")" && rm -f "$out"
+      if pdftoppm -png -f "${TERMPEEK_PDF_PAGE:-1}" -l "${TERMPEEK_PDF_PAGE:-1}" \
+           -aa yes -aaVector yes -scale-to-x 900 -scale-to-y -1 "$target" "$out" 2>/dev/null; then
+        printf '%s' "$(find "$(dirname "$out")" -name "$(basename "$out")-*.png" -print -quit)"
+        return 0
+      fi
+      return 1 ;;
+    video)
+      # A still frame stands in for the clip; a grid cannot animate anyway.
+      out="$(mktemp "$dir/tp-item.XXXXXX").png"
+      command -v ffmpeg >/dev/null 2>&1 || return 1
+      ffmpeg -y -i "$target" -frames:v 1 -vf "select=eq(n\,0)" "$out" >/dev/null 2>&1 \
+        && { printf '%s' "$out"; return 0; }
+      return 1 ;;
+    tweet)
+      # timg labels each cell with the filename, so name the card after the post
+      # rather than leaving it as the mktemp gibberish the user never chose.
+      local handle id label
+      handle="$(printf '%s' "$target" | sed -E 's#https?://(x|twitter)\.com/([^/]+)/status.*#\2#')"
+      id="$(printf '%s' "$target" | sed -E 's#.*status(es)?/([0-9]+).*#\2#')"
+      label="$(printf '%s' "@${handle}-${id}" | tr -cd '[:alnum:]@._-')"
+
+      local card; card="$("$TERMPEEK_LIB/../scripts/tweet-card" "$target")" || return 1
+      # timg reads bitmaps, not SVG, so rasterize when we can.
+      if command -v rsvg-convert >/dev/null 2>&1; then
+        out="$(dirname "$card")/${label}.png"
+        rsvg-convert -w "${TERMPEEK_CARD_WIDTH:-900}" -o "$out" "$card" 2>/dev/null \
+          && { rm -f "$card"; printf '%s' "$out"; return 0; }
+      fi
+      out="$(dirname "$card")/${label}.svg"
+      mv -f "$card" "$out" 2>/dev/null && { printf '%s' "$out"; return 0; }
+      printf '%s' "$card"; return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Gallery: every item on screen at once, tiled.
+tp_render_gallery() {
+  command -v timg >/dev/null 2>&1 || { echo "termpeek: timg required for a gallery" >&2; return 127; }
+  local proto="${TERMPEEK_PROTOCOL:-$(tp_detect_protocol)}"
+  local -a files=()
+  local t img
+  for t in "$@"; do
+    if img="$(tp_resolve_to_image "$t")" && [[ -n "$img" ]]; then
+      files+=("$img")
+    else
+      echo "termpeek: skipping (no still preview): $t" >&2
+    fi
+  done
+  (( ${#files[@]} )) || { echo "termpeek: nothing to show" >&2; return 66; }
+
+  local cols="${TERMPEEK_COLS:-${#files[@]}}"
+  (( cols > 4 )) && cols=4
+  local rows=$(( (${#files[@]} + cols - 1) / cols ))
+  timg -p "$(tp__timg_pixelation "$proto")" --grid="${cols}x${rows}" -g "$TP_GEOMETRY" \
+    --title='%b' "${files[@]}"
+}
+
+# Carousel: one at a time, advancing on a timer. timg's -w is the wait between
+# images and --loops controls how many times it cycles.
+tp_render_carousel() {
+  command -v timg >/dev/null 2>&1 || { echo "termpeek: timg required for a carousel" >&2; return 127; }
+  local proto="${TERMPEEK_PROTOCOL:-$(tp_detect_protocol)}"
+  local wait="${TERMPEEK_CAROUSEL_WAIT:-3}"
+  local loops="${TERMPEEK_LOOPS:-1}"
+  local -a files=()
+  local t img
+  for t in "$@"; do
+    if img="$(tp_resolve_to_image "$t")" && [[ -n "$img" ]]; then
+      files+=("$img")
+    else
+      echo "termpeek: skipping (no still preview): $t" >&2
+    fi
+  done
+  (( ${#files[@]} )) || { echo "termpeek: nothing to show" >&2; return 66; }
+
+  timg -p "$(tp__timg_pixelation "$proto")" -g "$TP_GEOMETRY" \
+    -w "$wait" --loops="$loops" --title='%b' --clear=every "${files[@]}"
 }
 
 # --- dispatch ---------------------------------------------------------------

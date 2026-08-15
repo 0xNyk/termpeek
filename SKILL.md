@@ -47,6 +47,7 @@ Options:
 | `--page <n>` | PDF page | `1` |
 | `--dpi <n>` | PDF render DPI | `150` |
 | `--loops <n>` | video loops, `-1` = forever | `1` |
+| `--gallery` / `--carousel` | several items tiled, or one at a time | off |
 | `--here` | render to stdout, no transport | off |
 
 ## What it handles
@@ -59,6 +60,10 @@ Options:
 | Diff | `delta` | syntax highlighted, side-by-side when wide enough |
 | Code/text | `bat` | syntax highlighting, line numbers |
 | X posts | `scripts/tweet-card` → `chafa` | fetch, render an SVG card, display |
+
+Several items at once: pass more than one target, or use `--gallery` to tile
+them and `--carousel` to cycle. Mixed types are fine — an image, a PDF page and
+a post can share one view.
 
 For an X post, pass the URL: `scripts/termpeek https://x.com/user/status/123`.
 Fetching tries the no-auth syndication endpoint first, then `xint` if it is

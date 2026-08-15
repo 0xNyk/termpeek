@@ -1,0 +1,205 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="733" height="484" viewBox="0 0 733 484" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+<rect width="733" height="484" rx="10" fill="#0d1117"/>
+<rect width="733" height="34.0" rx="10" fill="#161b22"/>
+<rect y="24.0" width="733" height="10" fill="#161b22"/>
+<circle cx="20" cy="17.0" r="6" fill="#ff5f57"/>
+<circle cx="38" cy="17.0" r="6" fill="#febc2e"/>
+<circle cx="56" cy="17.0" r="6" fill="#28c840"/>
+<text x="367" y="22" font-size="12.5" fill="#8b949e" text-anchor="middle">termpeek src/auth.ts</text>
+<text x="18.0" y="65.2" fill="#839496" font-size="13" xml:space="preserve">─────┬──────────────────────────────────────────────────────────────────────────</text>
+<text x="18.0" y="83.2" fill="#839496" font-size="13" xml:space="preserve">   1</text>
+<text x="60.0" y="83.2" fill="#839496" font-size="13" xml:space="preserve">│</text>
+<text x="76.8" y="83.2" fill="#f92672" font-size="13" xml:space="preserve">import</text>
+<text x="135.6" y="83.2" fill="#f8f8f2" font-size="13" xml:space="preserve">{</text>
+<text x="152.4" y="83.2" fill="#ffffff" font-size="13" xml:space="preserve">verify</text>
+<text x="211.2" y="83.2" fill="#f8f8f2" font-size="13" xml:space="preserve">}</text>
+<text x="228.0" y="83.2" fill="#f92672" font-size="13" xml:space="preserve">from</text>
+<text x="270.0" y="83.2" fill="#e6db74" font-size="13" xml:space="preserve">&quot;</text>
+<text x="278.4" y="83.2" fill="#e6db74" font-size="13" xml:space="preserve">./crypto</text>
+<text x="345.6" y="83.2" fill="#e6db74" font-size="13" xml:space="preserve">&quot;</text>
+<text x="354.0" y="83.2" fill="#f8f8f2" font-size="13" xml:space="preserve">;</text>
+<text x="18.0" y="101.2" fill="#839496" font-size="13" xml:space="preserve">   2</text>
+<text x="60.0" y="101.2" fill="#839496" font-size="13" xml:space="preserve">│</text>
+<text x="76.8" y="101.2" fill="#f92672" font-size="13" xml:space="preserve">import</text>
+<text x="135.6" y="101.2" fill="#f8f8f2" font-size="13" xml:space="preserve">{</text>
+<text x="152.4" y="101.2" fill="#ffffff" font-size="13" xml:space="preserve">getRoles</text>
+<text x="228.0" y="101.2" fill="#f8f8f2" font-size="13" xml:space="preserve">}</text>
+<text x="244.8" y="101.2" fill="#f92672" font-size="13" xml:space="preserve">from</text>
+<text x="286.8" y="101.2" fill="#e6db74" font-size="13" xml:space="preserve">&quot;</text>
+<text x="295.2" y="101.2" fill="#e6db74" font-size="13" xml:space="preserve">./roles</text>
+<text x="354.0" y="101.2" fill="#e6db74" font-size="13" xml:space="preserve">&quot;</text>
+<text x="362.4" y="101.2" fill="#f8f8f2" font-size="13" xml:space="preserve">;</text>
+<text x="18.0" y="119.2" fill="#839496" font-size="13" xml:space="preserve">   3</text>
+<text x="60.0" y="119.2" fill="#839496" font-size="13" xml:space="preserve">│</text>
+<text x="18.0" y="137.2" fill="#839496" font-size="13" xml:space="preserve">   4</text>
+<text x="60.0" y="137.2" fill="#839496" font-size="13" xml:space="preserve">│</text>
+<text x="76.8" y="137.2" fill="#f92672" font-size="13" xml:space="preserve">export</text>
+<text x="135.6" y="137.2" fill="#66d9ef" font-size="13" xml:space="preserve">interface</text>
+<text x="219.6" y="137.2" fill="#a6e22e" font-size="13" xml:space="preserve">Session</text>
+<text x="286.8" y="137.2" fill="#f8f8f2" font-size="13" xml:space="preserve">{</text>
+<text x="18.0" y="155.2" fill="#839496" font-size="13" xml:space="preserve">   5</text>
+<text x="60.0" y="155.2" fill="#839496" font-size="13" xml:space="preserve">│</text>
+<text x="93.6" y="155.2" fill="#f8f8f2" font-size="13" xml:space="preserve">userId</text>
+<text x="144.0" y="155.2" fill="#f92672" font-size="13" xml:space="preserve">:</text>
+<text x="160.8" y="155.2" fill="#a6e22e" font-size="13" xml:space="preserve">string</text>
+<text x="211.2" y="155.2" fill="#f8f8f2" font-size="13" xml:space="preserve">;</text>
+<text x="18.0" y="173.2" fill="#839496" font-size="13" xml:space="preserve">   6</text>
+<text x="60.0" y="173.2" fill="#839496" font-size="13" xml:space="preserve">│</text>
+<text x="93.6" y="173.2" fill="#f8f8f2" font-size="13" xml:space="preserve">scopes</text>
+<text x="144.0" y="173.2" fill="#f92672" font-size="13" xml:space="preserve">:</text>
+<text x="160.8" y="173.2" fill="#a6e22e" font-size="13" xml:space="preserve">string</text>
+<text x="211.2" y="173.2" fill="#f8f8f2" font-size="13" xml:space="preserve">[</text>
+<text x="219.6" y="173.2" fill="#f8f8f2" font-size="13" xml:space="preserve">]</text>
+<text x="228.0" y="173.2" fill="#f8f8f2" font-size="13" xml:space="preserve">;</text>
+<text x="18.0" y="191.2" fill="#839496" font-size="13" xml:space="preserve">   7</text>
+<text x="60.0" y="191.2" fill="#839496" font-size="13" xml:space="preserve">│</text>
+<text x="93.6" y="191.2" fill="#f8f8f2" font-size="13" xml:space="preserve">expiresAt</text>
+<text x="169.2" y="191.2" fill="#f92672" font-size="13" xml:space="preserve">:</text>
+<text x="186.0" y="191.2" fill="#a6e22e" font-size="13" xml:space="preserve">number</text>
+<text x="236.4" y="191.2" fill="#f8f8f2" font-size="13" xml:space="preserve">;</text>
+<text x="18.0" y="209.2" fill="#839496" font-size="13" xml:space="preserve">   8</text>
+<text x="60.0" y="209.2" fill="#839496" font-size="13" xml:space="preserve">│</text>
+<text x="76.8" y="209.2" fill="#f8f8f2" font-size="13" xml:space="preserve">}</text>
+<text x="18.0" y="227.2" fill="#839496" font-size="13" xml:space="preserve">   9</text>
+<text x="60.0" y="227.2" fill="#839496" font-size="13" xml:space="preserve">│</text>
+<text x="18.0" y="245.2" fill="#839496" font-size="13" xml:space="preserve">  10</text>
+<text x="60.0" y="245.2" fill="#839496" font-size="13" xml:space="preserve">│</text>
+<text x="76.8" y="245.2" fill="#f92672" font-size="13" xml:space="preserve">export</text>
+<text x="135.6" y="245.2" fill="#f92672" font-size="13" xml:space="preserve">async</text>
+<text x="186.0" y="245.2" fill="#66d9ef" font-size="13" xml:space="preserve">function</text>
+<text x="261.6" y="245.2" fill="#a6e22e" font-size="13" xml:space="preserve">authenticate</text>
+<text x="362.4" y="245.2" fill="#f8f8f2" font-size="13" xml:space="preserve">(</text>
+<text x="370.8" y="245.2" fill="#fd971f" font-size="13" xml:space="preserve">token</text>
+<text x="412.8" y="245.2" fill="#f92672" font-size="13" xml:space="preserve">:</text>
+<text x="429.6" y="245.2" fill="#a6e22e" font-size="13" xml:space="preserve">string</text>
+<text x="480.0" y="245.2" fill="#f8f8f2" font-size="13" xml:space="preserve">)</text>
+<text x="488.4" y="245.2" fill="#f92672" font-size="13" xml:space="preserve">:</text>
+<text x="505.2" y="245.2" fill="#a6e22e" font-size="13" xml:space="preserve">Promise</text>
+<text x="564.0" y="245.2" fill="#f8f8f2" font-size="13" xml:space="preserve">&lt;</text>
+<text x="572.4" y="245.2" fill="#a6e22e" font-size="13" xml:space="preserve">Session</text>
+<text x="639.6" y="245.2" fill="#f92672" font-size="13" xml:space="preserve">|</text>
+<text x="656.4" y="245.2" fill="#a6e22e" font-size="13" xml:space="preserve">null</text>
+<text x="690.0" y="245.2" fill="#f8f8f2" font-size="13" xml:space="preserve">&gt;</text>
+<text x="706.8" y="245.2" fill="#f8f8f2" font-size="13" xml:space="preserve">{</text>
+<text x="18.0" y="263.2" fill="#839496" font-size="13" xml:space="preserve">  11</text>
+<text x="60.0" y="263.2" fill="#839496" font-size="13" xml:space="preserve">│</text>
+<text x="93.6" y="263.2" fill="#66d9ef" font-size="13" xml:space="preserve">const</text>
+<text x="144.0" y="263.2" fill="#ffffff" font-size="13" xml:space="preserve">payload</text>
+<text x="211.2" y="263.2" fill="#f92672" font-size="13" xml:space="preserve">=</text>
+<text x="228.0" y="263.2" fill="#a6e22e" font-size="13" xml:space="preserve">verify</text>
+<text x="278.4" y="263.2" fill="#ffffff" font-size="13" xml:space="preserve">(</text>
+<text x="286.8" y="263.2" fill="#ffffff" font-size="13" xml:space="preserve">token</text>
+<text x="328.8" y="263.2" fill="#ffffff" font-size="13" xml:space="preserve">)</text>
+<text x="337.2" y="263.2" fill="#f8f8f2" font-size="13" xml:space="preserve">;</text>
+<text x="18.0" y="281.2" fill="#839496" font-size="13" xml:space="preserve">  12</text>
+<text x="60.0" y="281.2" fill="#839496" font-size="13" xml:space="preserve">│</text>
+<text x="93.6" y="281.2" fill="#f92672" font-size="13" xml:space="preserve">if</text>
+<text x="118.8" y="281.2" fill="#ffffff" font-size="13" xml:space="preserve">(</text>
+<text x="127.2" y="281.2" fill="#f92672" font-size="13" xml:space="preserve">!</text>
+<text x="135.6" y="281.2" fill="#ffffff" font-size="13" xml:space="preserve">payload</text>
+<text x="202.8" y="281.2" fill="#f92672" font-size="13" xml:space="preserve">||</text>
+<text x="228.0" y="281.2" fill="#ffffff" font-size="13" xml:space="preserve">payload</text>
+<text x="286.8" y="281.2" fill="#f8f8f2" font-size="13" xml:space="preserve">.</text>
+<text x="295.2" y="281.2" fill="#ffffff" font-size="13" xml:space="preserve">exp</text>
+<text x="328.8" y="281.2" fill="#f92672" font-size="13" xml:space="preserve">*</text>
+<text x="345.6" y="281.2" fill="#be84ff" font-size="13" xml:space="preserve">1000</text>
+<text x="387.6" y="281.2" fill="#f92672" font-size="13" xml:space="preserve">&lt;</text>
+<text x="404.4" y="281.2" fill="#a6e22e" font-size="13" xml:space="preserve">Date</text>
+<text x="438.0" y="281.2" fill="#f8f8f2" font-size="13" xml:space="preserve">.</text>
+<text x="446.4" y="281.2" fill="#a6e22e" font-size="13" xml:space="preserve">now</text>
+<text x="471.6" y="281.2" fill="#ffffff" font-size="13" xml:space="preserve">(</text>
+<text x="480.0" y="281.2" fill="#ffffff" font-size="13" xml:space="preserve">)</text>
+<text x="488.4" y="281.2" fill="#ffffff" font-size="13" xml:space="preserve">)</text>
+<text x="505.2" y="281.2" fill="#f8f8f2" font-size="13" xml:space="preserve">{</text>
+<text x="18.0" y="299.2" fill="#839496" font-size="13" xml:space="preserve">  13</text>
+<text x="60.0" y="299.2" fill="#839496" font-size="13" xml:space="preserve">│</text>
+<text x="110.4" y="299.2" fill="#f92672" font-size="13" xml:space="preserve">return</text>
+<text x="169.2" y="299.2" fill="#be84ff" font-size="13" xml:space="preserve">null</text>
+<text x="202.8" y="299.2" fill="#f8f8f2" font-size="13" xml:space="preserve">;</text>
+<text x="18.0" y="317.2" fill="#839496" font-size="13" xml:space="preserve">  14</text>
+<text x="60.0" y="317.2" fill="#839496" font-size="13" xml:space="preserve">│</text>
+<text x="93.6" y="317.2" fill="#f8f8f2" font-size="13" xml:space="preserve">}</text>
+<text x="18.0" y="335.2" fill="#839496" font-size="13" xml:space="preserve">  15</text>
+<text x="60.0" y="335.2" fill="#839496" font-size="13" xml:space="preserve">│</text>
+<text x="93.6" y="335.2" fill="#66d9ef" font-size="13" xml:space="preserve">const</text>
+<text x="144.0" y="335.2" fill="#ffffff" font-size="13" xml:space="preserve">scopes</text>
+<text x="202.8" y="335.2" fill="#f92672" font-size="13" xml:space="preserve">=</text>
+<text x="219.6" y="335.2" fill="#f92672" font-size="13" xml:space="preserve">await</text>
+<text x="270.0" y="335.2" fill="#a6e22e" font-size="13" xml:space="preserve">getRoles</text>
+<text x="337.2" y="335.2" fill="#ffffff" font-size="13" xml:space="preserve">(</text>
+<text x="345.6" y="335.2" fill="#ffffff" font-size="13" xml:space="preserve">payload</text>
+<text x="404.4" y="335.2" fill="#f8f8f2" font-size="13" xml:space="preserve">.</text>
+<text x="412.8" y="335.2" fill="#ffffff" font-size="13" xml:space="preserve">sub</text>
+<text x="438.0" y="335.2" fill="#ffffff" font-size="13" xml:space="preserve">)</text>
+<text x="446.4" y="335.2" fill="#f8f8f2" font-size="13" xml:space="preserve">;</text>
+<text x="18.0" y="353.2" fill="#839496" font-size="13" xml:space="preserve">  16</text>
+<text x="60.0" y="353.2" fill="#839496" font-size="13" xml:space="preserve">│</text>
+<text x="93.6" y="353.2" fill="#f92672" font-size="13" xml:space="preserve">return</text>
+<text x="152.4" y="353.2" fill="#f8f8f2" font-size="13" xml:space="preserve">{</text>
+<text x="169.2" y="353.2" fill="#f8f8f2" font-size="13" xml:space="preserve">userId</text>
+<text x="219.6" y="353.2" fill="#f8f8f2" font-size="13" xml:space="preserve">:</text>
+<text x="236.4" y="353.2" fill="#ffffff" font-size="13" xml:space="preserve">payload</text>
+<text x="295.2" y="353.2" fill="#f8f8f2" font-size="13" xml:space="preserve">.</text>
+<text x="303.6" y="353.2" fill="#ffffff" font-size="13" xml:space="preserve">sub</text>
+<text x="328.8" y="353.2" fill="#f8f8f2" font-size="13" xml:space="preserve">,</text>
+<text x="345.6" y="353.2" fill="#ffffff" font-size="13" xml:space="preserve">scopes</text>
+<text x="396.0" y="353.2" fill="#f8f8f2" font-size="13" xml:space="preserve">,</text>
+<text x="412.8" y="353.2" fill="#f8f8f2" font-size="13" xml:space="preserve">expiresAt</text>
+<text x="488.4" y="353.2" fill="#f8f8f2" font-size="13" xml:space="preserve">:</text>
+<text x="505.2" y="353.2" fill="#ffffff" font-size="13" xml:space="preserve">payload</text>
+<text x="564.0" y="353.2" fill="#f8f8f2" font-size="13" xml:space="preserve">.</text>
+<text x="572.4" y="353.2" fill="#ffffff" font-size="13" xml:space="preserve">exp</text>
+<text x="606.0" y="353.2" fill="#f92672" font-size="13" xml:space="preserve">*</text>
+<text x="622.8" y="353.2" fill="#be84ff" font-size="13" xml:space="preserve">1000</text>
+<text x="664.8" y="353.2" fill="#f8f8f2" font-size="13" xml:space="preserve">}</text>
+<text x="673.2" y="353.2" fill="#f8f8f2" font-size="13" xml:space="preserve">;</text>
+<text x="18.0" y="371.2" fill="#839496" font-size="13" xml:space="preserve">  17</text>
+<text x="60.0" y="371.2" fill="#839496" font-size="13" xml:space="preserve">│</text>
+<text x="76.8" y="371.2" fill="#f8f8f2" font-size="13" xml:space="preserve">}</text>
+<text x="18.0" y="389.2" fill="#839496" font-size="13" xml:space="preserve">  18</text>
+<text x="60.0" y="389.2" fill="#839496" font-size="13" xml:space="preserve">│</text>
+<text x="18.0" y="407.2" fill="#839496" font-size="13" xml:space="preserve">  19</text>
+<text x="60.0" y="407.2" fill="#839496" font-size="13" xml:space="preserve">│</text>
+<text x="76.8" y="407.2" fill="#f92672" font-size="13" xml:space="preserve">export</text>
+<text x="135.6" y="407.2" fill="#66d9ef" font-size="13" xml:space="preserve">function</text>
+<text x="211.2" y="407.2" fill="#a6e22e" font-size="13" xml:space="preserve">hasScope</text>
+<text x="278.4" y="407.2" fill="#f8f8f2" font-size="13" xml:space="preserve">(</text>
+<text x="286.8" y="407.2" fill="#fd971f" font-size="13" xml:space="preserve">session</text>
+<text x="345.6" y="407.2" fill="#f92672" font-size="13" xml:space="preserve">:</text>
+<text x="362.4" y="407.2" fill="#a6e22e" font-size="13" xml:space="preserve">Session</text>
+<text x="421.2" y="407.2" fill="#f8f8f2" font-size="13" xml:space="preserve">,</text>
+<text x="438.0" y="407.2" fill="#fd971f" font-size="13" xml:space="preserve">scope</text>
+<text x="480.0" y="407.2" fill="#f92672" font-size="13" xml:space="preserve">:</text>
+<text x="496.8" y="407.2" fill="#a6e22e" font-size="13" xml:space="preserve">string</text>
+<text x="547.2" y="407.2" fill="#f8f8f2" font-size="13" xml:space="preserve">)</text>
+<text x="555.6" y="407.2" fill="#f92672" font-size="13" xml:space="preserve">:</text>
+<text x="572.4" y="407.2" fill="#a6e22e" font-size="13" xml:space="preserve">boolean</text>
+<text x="639.6" y="407.2" fill="#f8f8f2" font-size="13" xml:space="preserve">{</text>
+<text x="18.0" y="425.2" fill="#839496" font-size="13" xml:space="preserve">  20</text>
+<text x="60.0" y="425.2" fill="#839496" font-size="13" xml:space="preserve">│</text>
+<text x="93.6" y="425.2" fill="#f92672" font-size="13" xml:space="preserve">return</text>
+<text x="152.4" y="425.2" fill="#ffffff" font-size="13" xml:space="preserve">session</text>
+<text x="211.2" y="425.2" fill="#f8f8f2" font-size="13" xml:space="preserve">.</text>
+<text x="219.6" y="425.2" fill="#ffffff" font-size="13" xml:space="preserve">scopes</text>
+<text x="270.0" y="425.2" fill="#f8f8f2" font-size="13" xml:space="preserve">.</text>
+<text x="278.4" y="425.2" fill="#a6e22e" font-size="13" xml:space="preserve">includes</text>
+<text x="345.6" y="425.2" fill="#ffffff" font-size="13" xml:space="preserve">(</text>
+<text x="354.0" y="425.2" fill="#ffffff" font-size="13" xml:space="preserve">scope</text>
+<text x="396.0" y="425.2" fill="#ffffff" font-size="13" xml:space="preserve">)</text>
+<text x="412.8" y="425.2" fill="#f92672" font-size="13" xml:space="preserve">||</text>
+<text x="438.0" y="425.2" fill="#ffffff" font-size="13" xml:space="preserve">session</text>
+<text x="496.8" y="425.2" fill="#f8f8f2" font-size="13" xml:space="preserve">.</text>
+<text x="505.2" y="425.2" fill="#ffffff" font-size="13" xml:space="preserve">scopes</text>
+<text x="555.6" y="425.2" fill="#f8f8f2" font-size="13" xml:space="preserve">.</text>
+<text x="564.0" y="425.2" fill="#a6e22e" font-size="13" xml:space="preserve">includes</text>
+<text x="631.2" y="425.2" fill="#ffffff" font-size="13" xml:space="preserve">(</text>
+<text x="639.6" y="425.2" fill="#e6db74" font-size="13" xml:space="preserve">&quot;</text>
+<text x="648.0" y="425.2" fill="#e6db74" font-size="13" xml:space="preserve">admin</text>
+<text x="690.0" y="425.2" fill="#e6db74" font-size="13" xml:space="preserve">&quot;</text>
+<text x="698.4" y="425.2" fill="#ffffff" font-size="13" xml:space="preserve">)</text>
+<text x="706.8" y="425.2" fill="#f8f8f2" font-size="13" xml:space="preserve">;</text>
+<text x="18.0" y="443.2" fill="#839496" font-size="13" xml:space="preserve">  21</text>
+<text x="60.0" y="443.2" fill="#839496" font-size="13" xml:space="preserve">│</text>
+<text x="76.8" y="443.2" fill="#f8f8f2" font-size="13" xml:space="preserve">}</text>
+<text x="18.0" y="461.2" fill="#839496" font-size="13" xml:space="preserve">─────┴──────────────────────────────────────────────────────────────────────────</text>
+</svg>
