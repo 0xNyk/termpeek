@@ -37,7 +37,7 @@ kill_stragglers() {
   # surviving run turns the next one into "TPREC 1 / TPREC 2" with a tab bar
   # across the top — which lands inside the recording and makes the detector
   # span both tabs.
-  pkill -f 'tpscene\.sh' 2>/dev/null
+  ps ax -o pid,command 2>/dev/null | awk '/[t]pscene\.sh/{print $1}' | xargs -r kill 2>/dev/null
   osascript -e 'tell application "Ghostty" to close (every window whose name contains "TPREC")' >/dev/null 2>&1
   sleep 1
 }

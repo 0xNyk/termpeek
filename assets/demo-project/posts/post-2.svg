@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="340" viewBox="0 0 700 340" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <rect width="700" height="340" rx="20" fill="#000000" stroke="#2f3336" stroke-width="2"/>
+  <circle cx="88" cy="88" r="34" fill="#1d9bf0"/>
+  <text x="88" y="99" font-size="30" font-weight="700" fill="#fff" text-anchor="middle">N</text>
+  <text x="140" y="82" font-size="21" font-weight="700" fill="#e7e9ea">Nyk</text>
+  <circle cx="192" cy="75" r="10" fill="#1d9bf0"/>
+  <path d="M187 75.5 l3.5 3.5 l6.5 -7.5" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="140" y="110" font-size="18" fill="#71767b">@nykdotdev</text>
+  <g transform="translate(604,58) scale(0.032)" fill="#e7e9ea"><path d="M714 519 L1160 0 H1054 L667 450 L358 0 H0 L468 681 L0 1227 H106 L515 751 L842 1227 H1200 L714 519 Z"/></g>
+  <text x="54" y="176" font-size="25" fill="#e7e9ea">The terminal always supported graphics. The agent </text>
+  <text x="54" y="210" font-size="25" fill="#e7e9ea">TUI was the thing in the way.</text>
+  <line x1="54" y1="252" x2="646" y2="252" stroke="#2f3336" stroke-width="1.5"/>
+  <text x="54" y="278" font-size="17" fill="#71767b">9:41 AM · Aug 12, 2026</text>
+  <text x="646" y="278" font-size="17" fill="#71767b" text-anchor="end">17 replies · 38 reposts · 246 likes</text>
+</svg>

@@ -35,7 +35,7 @@ die()  { printf '\033[31m%s\033[0m\n' "$1" >&2; exit 1; }
 
 cleanup() {
   tmux kill-session -t "$SESSION" 2>/dev/null
-  pkill -f 'tpclaude\.sh' 2>/dev/null
+  ps ax -o pid,command 2>/dev/null | awk '/[t]pclaude\.sh/{print $1}' | xargs -r kill 2>/dev/null
   osascript -e 'tell application "Ghostty" to close (every window whose name contains "TPREC")' >/dev/null 2>&1
   rm -rf "$WORK"
 }
@@ -44,7 +44,12 @@ trap cleanup EXIT
 command -v screencapture >/dev/null 2>&1 || die "screencapture not found (macOS only)"
 command -v tmux >/dev/null 2>&1 || die "tmux is required for the sidebar"
 command -v claude >/dev/null 2>&1 || die "claude not found on PATH"
-pgrep -f "Ghostty.app/Contents/MacOS/ghostty" >/dev/null 2>&1 \
+# Ask macOS, not pgrep. Ghostty's process is not named "ghostty" and its
+# command line does not contain the bundle's MacOS path, so both obvious pgrep
+# patterns report it missing while it is plainly running — which sent someone
+# off to open an app that was already open.
+osascript -e 'tell application "System Events" to return (name of every process) contains "Ghostty"' 2>/dev/null \
+  | grep -q true \
   || die "Ghostty is not running. Open it once, then re-run — 'open' cannot relaunch it from here."
 mkdir -p "$OUT"
 

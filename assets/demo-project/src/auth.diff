@@ -1,0 +1,23 @@
+--- /tmp/claude/old-auth.ts	2026-08-15 14:50:16
++++ assets/demo-project/src/auth.ts	2026-08-15 14:50:16
+@@ -1,7 +1,17 @@
+-export async function authenticate(token: string) {
++import { verify } from "./crypto";
++import { getRoles } from "./roles";
++
++export interface Session {
++  userId: string;
++  scopes: string[];
++  expiresAt: number;
++}
++
++export async function authenticate(token: string): Promise<Session | null> {
+   const payload = verify(token);
+-  if (!payload) {
++  if (!payload || payload.exp * 1000 < Date.now()) {
+     return null;
+   }
+-  return { userId: payload.sub, scopes: [] };
++  const scopes = await getRoles(payload.sub);
++  return { userId: payload.sub, scopes, expiresAt: payload.exp * 1000 };
+ }
