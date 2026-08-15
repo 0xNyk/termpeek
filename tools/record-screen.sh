@@ -30,7 +30,7 @@ MARKER_HEX="1157cd"
 WIN_X="${TP_WIN_X:-80}"
 WIN_Y="${TP_WIN_Y:-80}"
 COLS="${TP_COLS:-104}"
-ROWS="${TP_ROWS:-26}"
+ROWS="${TP_ROWS:-30}"
 FONT="${TP_FONT:-14}"
 DURATION="${TP_DURATION:-26}"
 
@@ -38,8 +38,18 @@ say()  { printf '\033[36m%s\033[0m\n' "$1" >&2; }
 warn() { printf '\033[33m%s\033[0m\n' "$1" >&2; }
 die()  { printf '\033[31m%s\033[0m\n' "$1" >&2; cleanup; exit 1; }
 
-cleanup() {
+kill_stragglers() {
+  # Match the process, not the window title: a window that has not yet set its
+  # title is invisible to an AppleScript name match, and earlier runs then
+  # lingered behind the new one — the detector locked onto a band spanning two
+  # of them and filmed neither properly.
+  pkill -f 'tp-screen\..*/stage\.sh' 2>/dev/null
   osascript -e 'tell application "Ghostty" to close (every window whose name contains "TPREC")' >/dev/null 2>&1
+  sleep 1
+}
+
+cleanup() {
+  kill_stragglers
   rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -47,6 +57,7 @@ trap cleanup EXIT
 command -v screencapture >/dev/null 2>&1 || die "screencapture not found (macOS only)"
 [[ -d /Applications/Ghostty.app ]] || die "Ghostty not found"
 mkdir -p "$OUT"
+kill_stragglers
 
 # Find the marker colour's bounding box in a PNG. Returns "x y w h" in PIXELS of
 # the capture, or nothing if the colour is absent.
@@ -133,7 +144,48 @@ PY
 # --- the window -------------------------------------------------------------
 FIX="$ROOT/tests/fixtures"
 [[ -s "$FIX/test.png" ]] || "$ROOT/tests/run.sh" >/dev/null 2>&1
-git -C "$ROOT" diff HEAD~1 -- lib/ > "$WORK/change.diff" 2>/dev/null
+# Build the diff from two written files. Deriving it from recent history meant
+# an empty scene whenever the last commit happened not to touch lib/.
+mkdir -p "$WORK/before" "$WORK/after"
+cat > "$WORK/before/auth.ts" <<'BEFORE'
+import { verify } from "./crypto";
+
+export async function authenticate(token: string) {
+  const payload = verify(token);
+  if (!payload) {
+    return null;
+  }
+  return { userId: payload.sub, scopes: [] };
+}
+
+export function hasScope(session: any, scope: string) {
+  return session.scopes.includes(scope);
+}
+BEFORE
+cat > "$WORK/after/auth.ts" <<'AFTER'
+import { verify } from "./crypto";
+import { getRoles } from "./roles";
+
+export interface Session {
+  userId: string;
+  scopes: string[];
+  expiresAt: number;
+}
+
+export async function authenticate(token: string): Promise<Session | null> {
+  const payload = verify(token);
+  if (!payload || payload.exp * 1000 < Date.now()) {
+    return null;
+  }
+  const scopes = await getRoles(payload.sub);
+  return { userId: payload.sub, scopes, expiresAt: payload.exp * 1000 };
+}
+
+export function hasScope(session: Session, scope: string): boolean {
+  return session.scopes.includes(scope) || session.scopes.includes("admin");
+}
+AFTER
+( cd "$WORK" && diff -u before/auth.ts after/auth.ts ) > "$WORK/change.diff" 2>/dev/null
 [[ -s "$WORK/change.diff" ]] || cp "$FIX/test.diff" "$WORK/change.diff"
 
 # Phase one only paints the marker and waits, so the geometry can be measured
@@ -166,26 +218,26 @@ pause 2.2
 
 p "termpeek out/latency.svg"
 pause 0.6
-\$TP --here -g 92x22 "$ROOT/assets/readme/protocol-frames.svg" 2>/dev/null
+\$TP --here -g 86x17 "$ROOT/assets/readme/protocol-frames.svg" 2>/dev/null
 pause 3.2
 
 printf '\033[2J\033[H'
 p "termpeek --diff"
 pause 0.5
-\$TP --here -g 100x24 "$WORK/change.diff" 2>/dev/null
+\$TP --here -g 96x18 "$WORK/change.diff" 2>/dev/null
 pause 3.4
 
 printf '\033[2J\033[H'
 p "termpeek q3-report.pdf"
 pause 0.5
-\$TP --here -g 74x24 "$ROOT/assets/video/report.pdf" 2>/dev/null || \\
-  \$TP --here -g 74x24 "$ROOT/assets/readme/demo-pdf.png" 2>/dev/null
+\$TP --here -g 60x19 "$ROOT/assets/video/report.pdf" 2>/dev/null || \\
+  \$TP --here -g 60x19 "$ROOT/assets/readme/demo-pdf.png" 2>/dev/null
 pause 3.2
 
 printf '\033[2J\033[H'
 p "termpeek https://x.com/nykdotdev/status/20"
 pause 0.5
-\$TP --here -g 92x18 "$ROOT/assets/readme/demo-gallery.png" 2>/dev/null
+\$TP --here -g 86x14 "$ROOT/assets/readme/demo-gallery.png" 2>/dev/null
 pause 3.2
 
 printf '\033[2J\033[H\n'
@@ -251,10 +303,14 @@ RH=$(( mh / SCALE ))
 # slides up OVER the window during the take. A symmetric inset both clipped the
 # first line of output and still let a strip of Dock icons in, so the bottom
 # gets a much deeper margin than the other sides.
+# Every side gets its own margin. The Dock creeps in at the bottom, other
+# windows and tab bars at the top, and a symmetric inset either clipped output
+# or let one of those through. Sides need almost nothing.
 INSET="${TP_INSET:-4}"
-INSET_BOTTOM="${TP_INSET_BOTTOM:-56}"
-RX=$(( RX + INSET )); RY=$(( RY + INSET ))
-RW=$(( RW - INSET * 2 )); RH=$(( RH - INSET - INSET_BOTTOM ))
+INSET_TOP="${TP_INSET_TOP:-34}"
+INSET_BOTTOM="${TP_INSET_BOTTOM:-30}"
+RX=$(( RX + INSET )); RY=$(( RY + INSET_TOP ))
+RW=$(( RW - INSET * 2 )); RH=$(( RH - INSET_TOP - INSET_BOTTOM ))
 (( RW < 200 || RH < 120 )) && die "marker region is implausibly small (${RW}x${RH}) — refusing to record"
 
 rm -f "$WORK/probe.png" "$WORK/raw"
