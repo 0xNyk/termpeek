@@ -219,18 +219,16 @@ tp_transport_inline() {
 # transmissions into a sidebar and the pane showed nothing but the footer,
 # while a diff in the same pane rendered perfectly.
 #
-# So the transport depends on WHAT is being shown, not just where we are. Text
-# goes to the sidebar; pixels go to a window that owns its own screen.
+# That was read as "pixels can never go in a pane", and for a while they were
+# routed to a separate window instead. The real constraint is narrower: what
+# tmux keeps is the PLACEHOLDER glyphs, and the picture only survives if the
+# renderer transmits in a form that reaches the terminal intact. chafa's does.
+# So everything goes to the sidebar, and render.sh makes sure chafa is what
+# runs there. See tp__use_chafa.
 tp_transport_for() {
   local target="$1" transport="$2"
   [[ "$transport" == "tmux" ]] || { printf '%s' "$transport"; return 0; }
-  [[ "${TERMPEEK_TMUX_PIXELS:-0}" == "1" ]] && { printf 'tmux'; return 0; }
-
-  # timg cannot wrap its output for tmux — it has no passthrough option, and
-  # emitted a single transmission where chafa emitted 2653. chafa-backed types
-  # are fine in a pane; the timg-backed ones are handled in render.sh by
-  # falling back to block output, which is text and therefore survives.
-  printf 'tmux' 
+  printf 'tmux'
 }
 
 tp_show() {

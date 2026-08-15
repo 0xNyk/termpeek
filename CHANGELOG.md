@@ -6,15 +6,45 @@ All notable changes to termpeek are recorded here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- Video previews render as a sampled filmstrip by default; `TERMPEEK_ANIMATE=1`
+  plays the clip instead. A still persists in the pane, an animation does not.
+- Tiled views (galleries, PDF contact sheets) choose their own layout: a narrow
+  sidebar stacks tiles, a wide pane spreads them. Pin with `--cols`.
+- `tools/make-banner.sh` and `tools/make-demo-assets.sh` — the README banner and
+  the demo clip are generated from source like every other image here.
+- `CODE_OF_CONDUCT.md`, issue forms and a pull request template.
+- `TERMPEEK_MAX_PAYLOAD` safety valve for tmux discarding a large transmission.
+
+### Changed
+
+- Inside tmux every path now renders through chafa, including video and tiled
+  views. chafa is the only renderer whose transmission survives the multiplexer.
+- PDFs rasterise at 2x the painted box and downscale, so the downscale does the
+  anti-aliasing. Small type is legible where it used to be soft.
+- The demo clip is 1280x720 instead of a 240x136 test fixture. timg will not
+  enlarge a source past its native size, so the old asset drew 15x5 cells.
+- README documents the tmux behaviour that actually ships; it previously said
+  images could not render in a pane, which stopped being true.
+
 ### Fixed
 
-- Images no longer disappear inside tmux. tmux stores no graphics in its screen
-  buffer, so a kitty transmission is forwarded by `allow-passthrough` and then
-  erased by the next pane redraw. Confirmed by watching a sidebar receive 2653
-  correctly wrapped transmissions and display nothing but its footer, while a
-  diff in the same pane rendered perfectly. Transport is now chosen by content:
-  text to the sidebar, pixels to a window. `TERMPEEK_TMUX_PIXELS=1` restores the
-  old behaviour.
+- Images no longer disappear inside tmux — and they now stay in the sidebar.
+  tmux keeps no graphics in its screen buffer, only the placeholder glyphs, so
+  whether a picture survives depends on how the renderer transmits it. An
+  earlier fix read that as "pixels can never go in a pane" and routed them to a
+  separate window; the narrower and correct fix is to render with chafa, whose
+  transmission reaches the terminal intact where timg's does not (1.69 MB vs
+  3.6 KB for the same image, measured in a live pane).
+- Previews no longer scroll themselves off the pane. A render sized to the full
+  pane with header text above it pushed the pane down by one line, and that
+  scroll is a redraw, which erases every kitty image in it. Text printed ahead
+  of a render now shrinks it. A full-pane PDF that drew its header and no page
+  was exactly this.
+- Galleries no longer fail silently on SVG input. ffmpeg cannot decode SVG, so
+  composing X post cards failed outright and fell back to a renderer that shows
+  nothing inside tmux.
 
 ### Added
 

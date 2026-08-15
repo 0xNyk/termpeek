@@ -1,0 +1,58 @@
+name: Bug report
+description: A preview did not show, or showed the wrong thing
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Most rendering bugs in this project came down to the terminal, the
+        multiplexer, or a renderer downgrading silently. The probe output below
+        usually identifies which.
+  - type: textarea
+    id: probe
+    attributes:
+      label: termpeek --probe
+      description: Paste the full output.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: termpeek --version
+    validations:
+      required: true
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal and OS
+      placeholder: Ghostty 1.2 on macOS 15.6, HiDPI display
+    validations:
+      required: true
+  - type: input
+    id: agent
+    attributes:
+      label: Agent CLI (if any)
+      placeholder: Claude Code, via the auto-preview hook
+  - type: textarea
+    id: command
+    attributes:
+      label: Command you ran
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what happened instead
+      description: |
+        "Blank pane", "wrong size", "text but no image" and "block art instead
+        of pixels" are all different failures — please say which.
+    validations:
+      required: true
+  - type: textarea
+    id: renderers
+    attributes:
+      label: Renderer versions
+      description: "Output of: chafa --version | head -1; ffmpeg -version | head -1; tmux -V"
+      render: text

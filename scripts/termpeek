@@ -46,17 +46,17 @@ termpeek — media preview for agent CLIs
   termpeek --version
 
 Options:
-  -g, --geometry <WxH>   size in character cells (default 80x40)
+  -g, --geometry <WxH>   size in character cells (default: measured from the pane)
   -p, --protocol <name>  kitty | iterm | sixel | symbols (default: detected)
   -t, --transport <name> tmux | window | inline (default: detected)
       --page <n>         PDF page to show (default 1)
       --pages            PDF contact sheet: all pages as a thumbnail grid
       --gallery          tile several items side by side
       --carousel         cycle through several items, one at a time
-      --cols <n>         gallery columns (default: one row, max 4)
+      --cols <n>         gallery columns (default: auto, laid out to fit the pane)
       --wait <secs>      carousel delay per item (default 3)
       --dpi <n>          PDF render DPI (overrides exact-pixel sizing)
-      --loops <n>        video loops (default 1, -1 = forever)
+      --loops <n>        video loops (default 1, -1 = forever; TERMPEEK_ANIMATE=1)
       --no-cache         re-render even if a cached copy exists
       --here             render to stdout instead of using a transport
 
