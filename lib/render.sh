@@ -57,11 +57,12 @@ tp_render_image() {
   chafa -f "$fmt" --size "$TP_GEOMETRY" "$target"
 }
 
-# timg has no tmux passthrough. Inside a pane it emitted a single transmission
-# where chafa emitted 2653, so its pixel output simply does not arrive. Block
-# output is ordinary text, which tmux stores and redraws like anything else — so
-# in a pane that is the only mode that actually shows something.
-tp__timg_in_tmux() { [[ -n "${TMUX:-}" && "${TERMPEEK_TMUX_PIXELS:-0}" != "1" ]]; }
+# An earlier version downgraded timg to blocks inside tmux, on the strength of a
+# measurement taken in a DETACHED session — where timg cannot query cell size
+# and renders one frame regardless. With a client attached, kitty works in a
+# pane: a chart rendered there at full fidelity. The downgrade only made video
+# and galleries needlessly blocky, so it is gone.
+tp__timg_in_tmux() { return 1; }
 
 tp__timg_pixelation() {
   if tp__timg_in_tmux; then printf 'q'; return 0; fi

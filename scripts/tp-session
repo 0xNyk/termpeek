@@ -81,4 +81,19 @@ tmux set-environment -t "$SESSION" TERMPEEK_HOST_PROTOCOL "$HOST_PROTO" 2>/dev/n
 tmux set-environment -t "$SESSION" PATH "$TERMPEEK_ROOT/scripts:$PATH" 2>/dev/null
 
 echo "tp-session: '$SESSION' started — agent=$AGENT protocol=$HOST_PROTO"
+
+# Attaching needs a real terminal. Run through a tool that captures stdout —
+# Claude Code's ! prefix, a CI step, any pipe — and tmux fails with the rather
+# unhelpful "open terminal failed: not a terminal". The session is already up at
+# this point, so say how to get to it rather than just dying.
+if [[ ! -t 0 || ! -t 1 ]]; then
+  echo
+  echo "  Not attached: this shell has no terminal."
+  echo "  The session is running. From a real terminal window:"
+  echo
+  echo "      tmux attach -t $SESSION"
+  echo
+  exit 0
+fi
+
 exec tmux attach -t "$SESSION"

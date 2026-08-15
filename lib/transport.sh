@@ -37,7 +37,25 @@ tp__make_runner() {
   cat > "$runner" <<EOF
 #!/usr/bin/env bash
 export TERMPEEK_LIB="$TERMPEEK_LIB"
-export TERMPEEK_GEOMETRY="${TERMPEEK_GEOMETRY:-80x40}"
+# Fit the render to the pane it lands in. The old fixed 80x40 was taller than a
+# sidebar, so the terminal scrolled — and a scroll is a redraw, which erases
+# kitty graphics. That is why a PDF showed its header and no page while a
+# smaller SVG in the same pane rendered fine. Measured at RUNTIME inside the
+# destination pane, because the parent has no idea how big it is.
+#
+# Note the escaping: an unquoted heredoc expands its WHOLE body at write time,
+# including branches that will never run, so every runtime variable needs \$.
+TERMPEEK_GEOMETRY_HINT="${TERMPEEK_GEOMETRY:-}"
+if [ -n "\$TERMPEEK_GEOMETRY_HINT" ]; then
+  export TERMPEEK_GEOMETRY="\$TERMPEEK_GEOMETRY_HINT"
+else
+  _cols=\$(tput cols 2>/dev/null || echo 80)
+  _rows=\$(tput lines 2>/dev/null || echo 40)
+  _rows=\$(( _rows - 4 ))
+  [ "\$_rows" -lt 8 ] && _rows=8
+  [ "\$_cols" -lt 20 ] && _cols=20
+  export TERMPEEK_GEOMETRY="\${_cols}x\${_rows}"
+fi
 export TERMPEEK_PROTOCOL="${TERMPEEK_PROTOCOL:-$(tp_detect_protocol)}"
 export TERMPEEK_LOOPS="${TERMPEEK_LOOPS:-1}"
 export TERMPEEK_PDF_PAGE="${TERMPEEK_PDF_PAGE:-1}"
