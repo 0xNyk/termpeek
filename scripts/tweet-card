@@ -9,7 +9,16 @@
 
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Resolve through symlinks: install.sh links this onto PATH, and taking dirname
+# of the link would point at the bin directory instead of the checkout, so the
+# libraries below would not be found. BSD readlink has no -f, hence the loop.
+tp__self="${BASH_SOURCE[0]}"
+while [ -L "$tp__self" ]; do
+  tp__dir="$(cd -P "$(dirname "$tp__self")" && pwd)"
+  tp__self="$(readlink "$tp__self")"
+  case "$tp__self" in /*) ;; *) tp__self="$tp__dir/$tp__self" ;; esac
+done
+ROOT="$(cd -P "$(dirname "$tp__self")/.." && pwd)"
 # shellcheck source=../lib/x-fetch.sh
 source "$ROOT/lib/x-fetch.sh"
 

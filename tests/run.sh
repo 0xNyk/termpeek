@@ -170,6 +170,14 @@ check "missing value -> 64"  "$("$TP" --here -g >/dev/null 2>&1; echo $?)" "64"
 check "unknown opt -> 64"    "$("$TP" --nonsense >/dev/null 2>&1; echo $?)" "64"
 check "absent file -> 66"    "$("$TP" --here /no/such/file >/dev/null 2>&1; echo $?)" "66"
 "$TP" --probe >/dev/null 2>&1 && ok "--probe runs" || no "--probe failed"
+# install.sh puts a symlink on PATH. Taking dirname of the link instead of the
+# real file pointed at the bin directory and no library was found — the install
+# was broken while every in-tree invocation kept working.
+link="$(mktemp -d "${TMPDIR:-/tmp}/tp-link.XXXXXX")/termpeek"
+ln -sf "$TP" "$link"
+( cd / && "$link" --probe ) >/dev/null 2>&1 \
+  && ok "runs through a symlink from another directory" \
+  || no "symlink invocation cannot find its libraries"
 "$TP" --version >/dev/null 2>&1 && ok "--version runs" || no "--version failed"
 # Both flag spellings must work; --loops=1 was a real bug.
 #

@@ -22,10 +22,24 @@ fi
 
 mkdir -p "$BIN_DIR" || { red "cannot create $BIN_DIR"; exit 1; }
 
+# Check the link actually landed. Reporting success after a failed ln sends
+# people off to run a command that is not there.
+failed=0
 for cmd in termpeek tp-session; do
-  ln -sf "$ROOT/scripts/$cmd" "$BIN_DIR/$cmd"
-  chmod +x "$ROOT/scripts/$cmd"
+  chmod +x "$ROOT/scripts/$cmd" 2>/dev/null
+  if ! ln -sf "$ROOT/scripts/$cmd" "$BIN_DIR/$cmd" 2>/dev/null || [[ ! -x "$BIN_DIR/$cmd" ]]; then
+    red "could not link $cmd into $BIN_DIR"
+    failed=1
+  fi
 done
+
+if (( failed )); then
+  echo
+  dim "Fix the permissions on $BIN_DIR, or choose another location:"
+  dim "  TERMPEEK_BIN_DIR=~/bin ./install.sh"
+  dim "You can also run it in place: $ROOT/scripts/termpeek"
+  exit 1
+fi
 grn "linked termpeek and tp-session into $BIN_DIR"
 
 case ":$PATH:" in
