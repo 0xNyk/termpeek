@@ -14,6 +14,12 @@ All notable changes to termpeek are recorded here. Format follows
   X API v2 via `xint`, and cookie auth for posts the others cannot reach. Pin
   one with `TERMPEEK_X_BACKEND`; all three normalize to a single record shape so
   the renderer only knows one schema.
+- A cache for the two paths that measurably cost something: X post cards
+  (1441 ms -> 186 ms) and PDF pages (476 ms -> 119 ms). Images and diffs are
+  left alone at ~90 ms; caching those would risk staleness to save nothing.
+  Local files are keyed on path, size and mtime, so an edit invalidates the
+  entry and no TTL is needed. Remote records expire after 15 minutes and
+  avatars after a week. `--cache`, `--clear-cache` and `--no-cache` expose it.
 - An MCP server (`scripts/termpeek-mcp`) exposing `preview`, `preview_many`,
   `preview_diff` and `probe`. One adapter covers every MCP-speaking agent
   instead of a bespoke integration each. Unlike image-oriented MCP servers it

@@ -48,6 +48,7 @@ Options:
 | `--dpi <n>` | PDF render DPI | `150` |
 | `--loops <n>` | video loops, `-1` = forever | `1` |
 | `--gallery` / `--carousel` | several items tiled, or one at a time | off |
+| `--no-cache` | re-render even if cached | off |
 | `--here` | render to stdout, no transport | off |
 
 ## What it handles

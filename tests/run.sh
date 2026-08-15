@@ -183,6 +183,46 @@ if command -v chafa >/dev/null 2>&1 && [[ -s "$FIX/test.png" ]]; then
   fi
 fi
 
+echo "== cache =="
+# shellcheck source=../lib/cache.sh
+source "$ROOT/lib/cache.sh"
+cachedir="$(mktemp -d "${TMPDIR:-/tmp}/tp-cache.XXXXXX")"
+# Deliberately NOT a subshell: ok/no increment pass/fail, and a subshell would
+# keep those increments local, so a failing cache check would never fail CI.
+tp_cache_saved="${TERMPEEK_CACHE:-}"
+export TERMPEEK_CACHE="$cachedir"
+# A file's key must change when the file does, or an edit serves a stale render.
+k1="$(tp_cache_key_file "$FIX/test.png" pdf 1)"
+k2="$(tp_cache_key_file "$FIX/test.png" pdf 2)"
+[[ "$k1" != "$k2" ]] && ok "different args give different keys" || no "keys collided across args"
+
+cp "$FIX/test.png" "$cachedir/mutable.png"
+ka="$(tp_cache_key_file "$cachedir/mutable.png" x)"
+sleep 1; printf 'extra' >> "$cachedir/mutable.png"
+kb="$(tp_cache_key_file "$cachedir/mutable.png" x)"
+[[ "$ka" != "$kb" ]] && ok "editing a file invalidates its key" || no "key survived an edit"
+
+# put/get round trip
+printf 'payload' > "$cachedir/src"
+stored="$(tp_cache_put render testkey "$cachedir/src")"
+[[ -s "$stored" ]] && ok "cache stores an entry" || no "cache did not store"
+[[ "$(tp_cache_get render testkey)" == "$stored" ]] && ok "cache returns the stored path" || no "cache get missed"
+check "absent key misses" "$(tp_cache_get render nosuchkey || echo MISS)" "MISS"
+
+# TTL: an entry older than the window must not be served. Backdate it rather
+# than sleeping, and use a positive window — ttl<=0 means "never expires" by
+# design, so a negative value proves nothing.
+touch -t 202001010000 "$stored" 2>/dev/null
+check "entry older than the ttl misses" \
+  "$(tp_cache_get render testkey 60 2>/dev/null || echo MISS)" "MISS"
+check "entry inside the ttl still hits" \
+  "$(tp_cache_get render testkey 0 2>/dev/null)" "$stored"
+
+# The disable switch has to actually bypass, not just skip writes.
+check "TERMPEEK_CACHE_DISABLE bypasses" \
+  "$(TERMPEEK_CACHE_DISABLE=1 tp_cache_get render testkey || echo MISS)" "MISS"
+if [[ -n "$tp_cache_saved" ]]; then export TERMPEEK_CACHE="$tp_cache_saved"; else unset TERMPEEK_CACHE; fi
+
 echo "== mcp server =="
 MCP="$ROOT/scripts/termpeek-mcp"
 if [[ -x "$MCP" ]] && command -v jq >/dev/null 2>&1; then

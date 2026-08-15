@@ -67,10 +67,22 @@ avatar_href() {
   local url="$1"
   [[ -n "$url" ]] || return 1
   command -v curl >/dev/null 2>&1 || return 1
+
+  local mime="image/jpeg"
+  case "$url" in *.png) mime="image/png" ;; *.webp) mime="image/webp" ;; esac
+
+  # Avatars change rarely and cost a round trip each time, so they get a long
+  # TTL — a week — rather than the short one the post record uses.
+  local ckey; ckey="$(tp_cache_key "avatar" "$url")"
+  local hit; hit="$(tp_cache_get avatar "$ckey" "$TERMPEEK_CACHE_AVATAR_TTL")"
+  if [[ -n "$hit" ]]; then
+    printf 'data:%s;base64,%s' "$mime" "$(base64 < "$hit" | tr -d '\n')"
+    return 0
+  fi
+
   local tmp; tmp="$(mktemp "${TMPDIR:-/tmp}/tp-avatar.XXXXXX")" || return 1
   if curl -fsS --max-time 8 "$url" -o "$tmp" 2>/dev/null && [[ -s "$tmp" ]]; then
-    local mime="image/jpeg"
-    case "$url" in *.png) mime="image/png" ;; *.webp) mime="image/webp" ;; esac
+    tp_cache_put avatar "$ckey" "$tmp" >/dev/null
     printf 'data:%s;base64,%s' "$mime" "$(base64 < "$tmp" | tr -d '\n')"
     rm -f "$tmp"; return 0
   fi

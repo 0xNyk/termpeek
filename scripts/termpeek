@@ -37,6 +37,8 @@ termpeek — media preview for agent CLIs
   termpeek <file|url> [more...]    preview one item, or several together
   termpeek --diff [<git args>]     preview the working-tree diff
   termpeek --probe                 print detected terminal capabilities
+  termpeek --cache                 show what is cached
+  termpeek --clear-cache           empty the cache
   termpeek --version
 
 Options:
@@ -51,6 +53,7 @@ Options:
       --wait <secs>      carousel delay per item (default 3)
       --dpi <n>          PDF render DPI (overrides exact-pixel sizing)
       --loops <n>        video loops (default 1, -1 = forever)
+      --no-cache         re-render even if a cached copy exists
       --here             render to stdout instead of using a transport
 
 Environment overrides mirror the flags: TERMPEEK_GEOMETRY, TERMPEEK_PROTOCOL,
@@ -96,6 +99,9 @@ main() {
       -h|--help)      tp_usage; return 0 ;;
       --version)      echo "termpeek 0.1.0"; return 0 ;;
       --probe)        mode="probe"; shift ;;
+      --cache)        mode="cache"; shift ;;
+      --clear-cache)  mode="clear-cache"; shift ;;
+      --no-cache)     export TERMPEEK_CACHE_DISABLE=1; shift ;;
       --diff)         mode="diff"; shift; gitargs=(${1+"$@"}); break ;;
       --here)         force_here=1; shift ;;
       -g|--geometry)  export TERMPEEK_GEOMETRY="$2"; shift 2 ;;
@@ -122,6 +128,16 @@ main() {
   case "$mode" in
     probe)
       tp_probe_report
+      echo
+      tp_cache_stats
+      return 0
+      ;;
+    cache)
+      tp_cache_stats
+      return 0
+      ;;
+    clear-cache)
+      tp_cache_clear
       return 0
       ;;
     diff)

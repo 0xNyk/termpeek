@@ -17,6 +17,9 @@ set -uo pipefail
 
 TERMPEEK_X_TIMEOUT="${TERMPEEK_X_TIMEOUT:-10}"
 
+# shellcheck source=./cache.sh
+source "${TERMPEEK_LIB:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/cache.sh"
+
 tp_x_need() {
   command -v "$1" >/dev/null 2>&1 || { echo "termpeek: $1 is required for tweet preview" >&2; return 127; }
 }
@@ -149,6 +152,17 @@ tp_x_fetch() {
   local id="$1" want="${TERMPEEK_X_BACKEND:-auto}"
   local raw out
 
+  # Fetching dominates this path — measured at ~595ms for a card, nearly all of
+  # it network. A post's text never changes, but its counts do, so this expires
+  # rather than living forever. Caching also blunts the flakiest dependency in
+  # the project: an undocumented endpoint that can rate-limit or vanish.
+  local ckey; ckey="$(tp_cache_key "x" "$id" "$want")"
+  local hit; hit="$(tp_cache_get x "$ckey" "$TERMPEEK_CACHE_TTL")"
+  if [[ -n "$hit" ]]; then
+    cat "$hit"
+    return 0
+  fi
+
   for backend in syndication xint cookies; do
     if [[ "$want" != "auto" && "$want" != "$backend" ]]; then continue; fi
     case "$backend" in
@@ -159,6 +173,10 @@ tp_x_fetch() {
     [[ -z "$raw" ]] && continue
     out="$(printf '%s' "$raw" | tp_x_normalize 2>/dev/null)"
     if [[ -n "$out" && "$out" != "null" ]]; then
+      local tmp; tmp="$(mktemp "${TMPDIR:-/tmp}/tp-x.XXXXXX")"
+      printf '%s' "$out" > "$tmp"
+      tp_cache_put x "$ckey" "$tmp" >/dev/null
+      rm -f "$tmp"
       printf '%s' "$out"
       return 0
     fi

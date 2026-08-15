@@ -9,6 +9,8 @@ set -uo pipefail
 TERMPEEK_LIB="${TERMPEEK_LIB:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 # shellcheck source=./probe.sh
 source "$TERMPEEK_LIB/probe.sh"
+# shellcheck source=./cache.sh
+source "$TERMPEEK_LIB/cache.sh"
 
 TP_GEOMETRY="${TERMPEEK_GEOMETRY:-80x40}"
 
@@ -163,6 +165,24 @@ tp_render_pdf() {
   local pages; pages="$(tp__pdf_pages "$target")"
 
   if command -v pdftoppm >/dev/null 2>&1 && command -v chafa >/dev/null 2>&1; then
+    # Rasterizing and framing a page costs ~250ms and produces the same bytes
+    # every time. The key includes the file's mtime and size, so editing the
+    # PDF invalidates it and a stale page can never be served.
+    local ckey; ckey="$(tp_cache_key_file "$target" "pdf" "$page" \
+      "${TERMPEEK_PDF_DPI:-auto}" "$TP_GEOMETRY" "$(tp__cell_pixels)")"
+    local hit; hit="$(tp_cache_get render "$ckey")"
+    if [[ -n "$hit" ]]; then
+      printf '\033[1m%s\033[0m  \033[2m·  PDF  ·  page %s of %s\033[0m\n' \
+        "$(basename "$target")" "$page" "$pages"
+      tp_render_image "$hit" "$proto"
+      local hrc=$?
+      if [[ "$pages" != "?" && "$pages" != "1" ]]; then
+        printf '\033[2m[ page %s of %s — --page <n> to move, --pages for contact sheet ]\033[0m\n' \
+          "$page" "$pages"
+      fi
+      return $hrc
+    fi
+
     local tmp; tmp="$(mktemp -d "${TMPDIR:-/tmp}/termpeek-pdf.XXXXXX")" || return 1
 
     # Rasterize at exactly the pixel width the terminal will paint, so chafa
@@ -205,6 +225,7 @@ tp_render_pdf() {
       if [[ -n "$png" ]]; then
         local framed="$tmp/framed.png"
         tp__pdf_frame "$png" "$framed" || framed="$png"
+        framed="$(tp_cache_put render "$ckey" "$framed")"
 
         printf '\033[1m%s\033[0m  \033[2m·  PDF  ·  page %s of %s\033[0m\n' \
           "$(basename "$target")" "$page" "$pages"
