@@ -73,8 +73,12 @@ fi
 # shellcheck disable=SC2209  # env-var prefix on a function call, not an assignment
 check "\$TERMINAL wins when installed" "$(TERMINAL=cat tp_linux_terminal)" "cat"
 check "\$TERMINAL args stripped"       "$(TERMINAL='cat -v' tp_linux_terminal)" "cat"
+# An uninstalled $TERMINAL must be ignored, i.e. produce whatever plain
+# detection produces. Asserting an exit code here would only test whether the
+# machine happens to have a terminal emulator — CI runners have none.
 check "uninstalled \$TERMINAL ignored" \
-  "$(TERMINAL=definitely-not-a-terminal tp_linux_terminal >/dev/null 2>&1; echo $?)" "0"
+  "$(TERMINAL=definitely-not-a-terminal tp_linux_terminal 2>/dev/null)" \
+  "$(tp_linux_terminal 2>/dev/null)"
 
 echo "== renderer output shape =="
 if command -v chafa >/dev/null 2>&1 && [[ -f "$FIX/test.png" ]]; then
