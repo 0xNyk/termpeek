@@ -40,7 +40,8 @@ do here. Every check in the suite exists because something broke.
 Every image in the README is built from real command output by a committed
 script — `tools/ansi2svg.py` for terminal output, `tools/make-banner.sh` for the
 banner, `tools/make-demo-video.sh` for the clip, `tools/make-demo-assets.sh` for
-the demo project's media. The tmux sidebar shot is a genuine `tmux capture-pane`.
+the demo project's media, `tools/make-readme-assets.sh` for images that show
+composed output. The tmux sidebar shot is a genuine `tmux capture-pane`.
 
 ```bash
 ./scripts/termpeek --here --diff | tools/ansi2svg.py --title "termpeek --diff" -o out.svg

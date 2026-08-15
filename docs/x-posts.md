@@ -6,7 +6,7 @@ Paste a link, see the post. No API key, no browser, no login.
 termpeek https://x.com/nykdotdev/status/20
 ```
 
-![Three X post cards tiled side by side in one terminal pane.](../assets/readme/demo-gallery.png)
+![Three X post cards stacked in a termpeek sidebar pane, each showing avatar, handle, verified badge, text and counts.](../assets/readme/demo-gallery.png)
 
 The card is generated as SVG and handed straight to chafa, which rasterizes SVG
 natively — so this path adds no browser, no headless Chrome, and no JavaScript

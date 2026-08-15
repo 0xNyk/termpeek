@@ -178,7 +178,7 @@ termpeek --gallery a.png report.pdf https://x.com/nykdotdev/status/20
 termpeek --carousel --wait 4 links/*.url     # one at a time
 ```
 
-![Three X post cards tiled side by side in one terminal pane.](assets/readme/demo-gallery.png)
+![Three X post cards stacked in a termpeek sidebar pane, each showing avatar, handle, verified badge, text and counts.](assets/readme/demo-gallery.png)
 
 The layout adapts to the pane rather than assuming a row: a narrow sidebar
 stacks the tiles, a wide window spreads them. Pin it with `--cols`.
