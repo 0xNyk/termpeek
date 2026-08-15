@@ -57,7 +57,14 @@ tp_render_image() {
   chafa -f "$fmt" --size "$TP_GEOMETRY" "$target"
 }
 
+# timg has no tmux passthrough. Inside a pane it emitted a single transmission
+# where chafa emitted 2653, so its pixel output simply does not arrive. Block
+# output is ordinary text, which tmux stores and redraws like anything else — so
+# in a pane that is the only mode that actually shows something.
+tp__timg_in_tmux() { [[ -n "${TMUX:-}" && "${TERMPEEK_TMUX_PIXELS:-0}" != "1" ]]; }
+
 tp__timg_pixelation() {
+  if tp__timg_in_tmux; then printf 'q'; return 0; fi
   case "$1" in
     kitty) printf 'k' ;;
     iterm) printf 'i' ;;
@@ -90,8 +97,9 @@ tp_render_video() {
   command -v timg >/dev/null 2>&1 || { echo "termpeek: timg not installed (brew install timg)" >&2; return 127; }
 
   local p
-  if [[ "${TERMPEEK_FORCE_BLOCKS:-0}" == "1" ]] || { [[ "$proto" == "kitty" ]] && [[ ! -t 1 ]]; }; then
-    p=q   # no tty to answer the query: a coarse moving picture beats a frozen one
+  if [[ "${TERMPEEK_FORCE_BLOCKS:-0}" == "1" ]] || tp__timg_in_tmux \
+     || { [[ "$proto" == "kitty" ]] && [[ ! -t 1 ]]; }; then
+    p=q   # coarse but visible beats sharp and absent
   else
     p="$(tp__timg_pixelation "$proto")"
   fi
@@ -174,13 +182,12 @@ tp_render_pdf() {
     if [[ -n "$hit" ]]; then
       printf '\033[1m%s\033[0m  \033[2m·  PDF  ·  page %s of %s\033[0m\n' \
         "$(basename "$target")" "$page" "$pages"
-      tp_render_image "$hit" "$proto"
-      local hrc=$?
       if [[ "$pages" != "?" && "$pages" != "1" ]]; then
         printf '\033[2m[ page %s of %s — --page <n> to move, --pages for contact sheet ]\033[0m\n' \
           "$page" "$pages"
       fi
-      return $hrc
+      tp_render_image "$hit" "$proto"
+      return $?
     fi
 
     local tmp; tmp="$(mktemp -d "${TMPDIR:-/tmp}/termpeek-pdf.XXXXXX")" || return 1
@@ -229,12 +236,14 @@ tp_render_pdf() {
 
         printf '\033[1m%s\033[0m  \033[2m·  PDF  ·  page %s of %s\033[0m\n' \
           "$(basename "$target")" "$page" "$pages"
-        tp_render_image "$framed" "$proto"
-        local rc=$?
+        # Counter BEFORE the image: printing after it forces a tmux redraw and
+        # tmux does not re-send graphics, so the page would vanish.
         if [[ "$pages" != "?" && "$pages" != "1" ]]; then
           printf '\033[2m[ page %s of %s — --page <n> to move, --pages for contact sheet ]\033[0m\n' \
             "$page" "$pages"
         fi
+        tp_render_image "$framed" "$proto"
+        local rc=$?
         rm -rf "$tmp"
         return $rc
       fi

@@ -33,9 +33,10 @@ tp_detect_protocol() {
       printf '%s' "$TERMPEEK_HOST_PROTOCOL"; return 0
     fi
     local cached; cached="$(tp_load_host_protocol)"
-    if [[ -n "$cached" ]]; then
-      printf '%s' "$cached"; return 0
-    fi
+    # Ignore a cached fallback for the same reason it should never be written.
+    case "$cached" in
+      kitty|iterm|sixel) printf '%s' "$cached"; return 0 ;;
+    esac
     if command -v tmux >/dev/null 2>&1; then
       local ct
       ct="$(tmux display-message -p '#{client_termname}' 2>/dev/null)"
@@ -74,9 +75,19 @@ tp_is_pixel_protocol() {
 
 # Cache the host terminal's protocol before entering tmux, so the probe above
 # has something trustworthy to read once TERM has been rewritten.
+# Only ever cache a POSITIVE result. "symbols" is what detection returns when it
+# could not tell — caching that poisons every later preview in the session, and
+# the cache outlives the session, so one bad detection degrades the tool
+# permanently until someone clears it by hand. Observed exactly that: a stale
+# "symbols" entry silently forced block art in a terminal that does kitty.
 tp_record_host_protocol() {
-  mkdir -p "$TERMPEEK_CACHE"
-  tp_detect_protocol > "$TERMPEEK_CACHE/host-protocol"
+  local proto; proto="$(tp_detect_protocol)"
+  case "$proto" in
+    kitty|iterm|sixel) ;;
+    *) return 0 ;;
+  esac
+  mkdir -p "$TERMPEEK_CACHE" 2>/dev/null || return 0
+  printf '%s' "$proto" > "$TERMPEEK_CACHE/host-protocol"
 }
 
 tp_load_host_protocol() {

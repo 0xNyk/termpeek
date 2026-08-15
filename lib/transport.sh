@@ -47,6 +47,12 @@ export TERMPEEK_MULTI_FN="${TERMPEEK_MULTI_FN:-}"
 export TERMPEEK_MULTI_LIST="${TERMPEEK_MULTI_LIST:-}"
 source "$TERMPEEK_LIB/render.sh"
 printf '\033]0;termpeek: %s\007' "$(basename "$target")"
+# Anything printed AFTER an image makes tmux redraw the pane, and tmux does not
+# re-send graphics on redraw — so the picture is erased by our own footer. Say
+# everything up front, then draw, then print nothing at all.
+if [[ "$hold" == "1" ]]; then
+  printf '\033[2m[termpeek] %s\033[0m\n\n' "$(basename "$target")"
+fi
 if [[ -n "\$TERMPEEK_MULTI_FN" && -s "\$TERMPEEK_MULTI_LIST" ]]; then
   items=()
   while IFS= read -r line; do [[ -n "\$line" ]] && items+=("\$line"); done < "\$TERMPEEK_MULTI_LIST"
@@ -59,10 +65,11 @@ else
 fi
 status=\$?
 rm -f "$runner"
-if [[ "$hold" == "1" ]]; then
-  printf '\n\033[2m[termpeek] %s — press enter to close\033[0m\n' "$(basename "$target")"
-  read -r
-fi
+  # Park without printing: a bare read draws nothing, so the image survives.
+  # No backticks anywhere in this heredoc — it is unquoted, so backticks run
+  # as a command substitution at write time, and a stray 'read' then executes
+  # in the PARENT and hangs every single preview.
+[[ "$hold" == "1" ]] && read -r
 exit \$status
 EOF
   chmod +x "$runner"
@@ -96,7 +103,7 @@ tp_transport_tmux() {
       # Floating, dismissible, does not disturb the layout at all.
       local runner; runner="$(tp__make_runner "$target" 0)"
       tmux display-popup -E -w "${TERMPEEK_POPUP_W:-80%}" -h "${TERMPEEK_POPUP_H:-80%}" \
-        "$runner; printf '\n[termpeek] press enter to close\n'; read -r"
+        "$runner; read -r"
       ;;
     sidebar|*)
       # The sidebar must OUTLIVE the render. A pane whose command exits is
@@ -201,16 +208,11 @@ tp_transport_for() {
   [[ "$transport" == "tmux" ]] || { printf '%s' "$transport"; return 0; }
   [[ "${TERMPEEK_TMUX_PIXELS:-0}" == "1" ]] && { printf 'tmux'; return 0; }
 
-  case "$(tp_detect_type "$target")" in
-    diff|file|missing) printf 'tmux' ;;
-    *)
-      if [[ "$(tp_detect_protocol)" == "symbols" ]]; then
-        printf 'tmux'          # character art is text, so the sidebar is fine
-      else
-        printf 'window'
-      fi
-      ;;
-  esac
+  # timg cannot wrap its output for tmux — it has no passthrough option, and
+  # emitted a single transmission where chafa emitted 2653. chafa-backed types
+  # are fine in a pane; the timg-backed ones are handled in render.sh by
+  # falling back to block output, which is text and therefore survives.
+  printf 'tmux' 
 }
 
 tp_show() {
