@@ -6,6 +6,18 @@ All notable changes to termpeek are recorded here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- A demo video, built by `tools/make-demo-video.sh` from real command output,
+  and `tools/record-session.sh`, which records an actual tmux session by
+  sampling its panes rather than recording the screen.
+
+### Changed
+
+- Codex and Hermes are now verified rather than assumed: Codex calls `preview`
+  through MCP and the window opens, and `hermes mcp test` connects and lists all
+  four tools. The README status table reflects what was actually run.
+
 ## [0.2.0] — 2026-08-15
 
 ### Added

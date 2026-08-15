@@ -17,6 +17,8 @@ termpeek https://x.com/nykdotdev/status/20       # the post, as a card
 termpeek --diff HEAD~1                           # what changed, side by side
 ```
 
+![termpeek previewing an image, a PDF, a diff and X posts inside a terminal](assets/video/demo.gif)
+
 ![Without termpeek the agent TUI captures stdout, strips escapes and repaints over the PTY, so you see a filename. With termpeek the render happens outside the TUI, in a tmux sidebar or separate window.](assets/readme/how-it-works.png)
 
 ## Why this is needed
@@ -322,16 +324,23 @@ beats sharp and stuck.
 | CLI | How | Status |
 |---|---|---|
 | Claude Code | skill, auto-preview hook, or MCP | verified end to end |
-| Codex | MCP | protocol verified, not tried in the client |
+| Codex | MCP | verified end to end — `mcp: termpeek/preview (completed)` |
+| Hermes Agent | MCP | connected, all 4 tools discovered by its own tester |
 | Gemini CLI | MCP | protocol verified, not tried in the client |
-| Hermes Agent | MCP, shell hook, or a Python plugin | untested |
 | Grok Build | renders images natively; termpeek adds PDFs, diffs and posts | untested |
 
-Claude Code is verified end to end. The MCP server is verified at the protocol
-level — handshake, tool listing, calls, notifications, malformed input — but I
-have not driven it from Codex or Gemini myself, so those are marked accordingly.
-Reports welcome. If your agent can run a shell command or speak MCP, it can use
-termpeek.
+Claude Code and Codex have been driven end to end — Codex discovers the tools,
+calls `preview`, and the window opens. Hermes connects and enumerates all four
+tools via `hermes mcp test`. Gemini is protocol-verified only; I have not run it
+from that client, so it is marked accordingly rather than assumed.
+
+If your agent can run a shell command or speak MCP, it can use termpeek.
+
+```bash
+claude mcp add termpeek -- /path/to/termpeek/scripts/termpeek-mcp
+codex mcp add termpeek  -- /path/to/termpeek/scripts/termpeek-mcp
+hermes mcp add termpeek --command /path/to/termpeek/scripts/termpeek-mcp
+```
 
 ## How this differs from what already exists
 
@@ -374,6 +383,17 @@ page framing. Everything else degrades: with no graphics protocol you get
 Unicode block art, which works in any terminal.
 
 ## Demos are reproducible
+
+The video too. `tools/make-demo-video.sh` builds `demo.mp4` from real output,
+and `tools/record-session.sh` records an actual tmux session by sampling its
+panes — the sidebar in that clip really opens.
+
+Neither uses screen recording. macOS records a whole display, so if the window
+you meant to capture never comes to the front, the recording quietly contains
+whatever else was on screen. That is not hypothetical: it happened while
+building this README, and the capture held someone's unrelated work. Sampling a
+pane cannot do that.
+
 
 Every demo above comes from real command output. `tools/ansi2svg.py` reads the
 bytes a command actually writes — SGR colour, bold, dim, inverse — and draws
