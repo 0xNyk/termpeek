@@ -68,11 +68,14 @@ if command -v chafa >/dev/null 2>&1 && [[ -f "$FIX/test.png" ]]; then
     *$'\033'_G*) ok "image/kitty emits APC graphics" ;;
     *)           no "image/kitty missing APC graphics" ;;
   esac
+  # Symbols mode must produce character art and must NOT use a pixel protocol.
+  # Do not assert colour escapes here: with no colour support (CI, TERM=dumb)
+  # chafa legitimately emits plain ASCII, which is still a correct rendering.
   out="$(TP_GEOMETRY=20x10 tp_render_image "$FIX/test.png" symbols 2>/dev/null | head -c 2000)"
   case "$out" in
-    *$'\033'_G*) no "image/symbols should NOT emit APC graphics" ;;
-    *$'\033'\[*) ok "image/symbols emits colour text" ;;
-    *)           no "image/symbols produced nothing" ;;
+    *$'\033'_G*) no "image/symbols must not emit APC graphics" ;;
+    "")          no "image/symbols produced nothing" ;;
+    *)           ok "image/symbols emits character art" ;;
   esac
 else
   echo "  chafa or fixture missing; skipping image checks"
@@ -102,9 +105,13 @@ check "absent file -> 66"    "$("$TP" --here /no/such/file >/dev/null 2>&1; echo
 "$TP" --probe >/dev/null 2>&1 && ok "--probe runs" || no "--probe failed"
 "$TP" --version >/dev/null 2>&1 && ok "--version runs" || no "--version failed"
 # Both flag spellings must work; --loops=1 was a real bug.
-if [[ -f "$FIX/anim.mp4" ]]; then
-  "$TP" --here -g 12x6 --loops=1 "$FIX/anim.mp4" >/dev/null 2>&1 && ok "--loops=1 accepted" || no "--loops=1 rejected"
-  "$TP" --here -g 12x6 --loops 1 "$FIX/anim.mp4" >/dev/null 2>&1 && ok "--loops 1 accepted" || no "--loops 1 rejected"
+#
+# Deliberately run against an IMAGE, not a video: this asserts argument parsing,
+# and pairing it with a video made the check fail on any machine without timg
+# (Linux has no timg in apt) for a reason unrelated to what is being tested.
+if command -v chafa >/dev/null 2>&1 && [[ -s "$FIX/test.png" ]]; then
+  "$TP" --here -g 12x6 --loops=1 "$FIX/test.png" >/dev/null 2>&1 && ok "--loops=1 accepted" || no "--loops=1 rejected"
+  "$TP" --here -g 12x6 --loops 1 "$FIX/test.png" >/dev/null 2>&1 && ok "--loops 1 accepted" || no "--loops 1 rejected"
 fi
 
 echo
